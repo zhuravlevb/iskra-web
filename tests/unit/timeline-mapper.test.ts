@@ -46,13 +46,44 @@ describe('TimelineMapper', () => {
 
   it('вложения — с размерами из события: высота известна до загрузки', () => {
     const photo = map({ type: 'm.room.message', content: { msgtype: 'm.image', body: 'cat.jpg', url: 'mxc://x/1', info: { w: 800, h: 600, mimetype: 'image/jpeg', size: 1234 } } });
-    expect(photo?.kind).toEqual({ type: 'image', attachment: { body: 'cat.jpg', url: 'mxc://x/1', width: 800, height: 600, mimetype: 'image/jpeg', size: 1234 } });
+    expect(photo?.kind).toEqual({ type: 'image', attachment: { name: 'cat.jpg', source: { mxc: 'mxc://x/1' }, width: 800, height: 600, mimetype: 'image/jpeg', size: 1234 } });
     const note = map({ type: 'm.room.message', content: { msgtype: 'm.video', body: 'v', info: { w: 400, h: 400, duration: 12_000 } } });
     expect(note?.kind.type).toBe('videoNote');
     const voice = map({ type: 'm.room.message', content: { msgtype: 'm.audio', body: 'a', 'org.matrix.msc3245.voice': {} } });
     expect(voice?.kind.type).toBe('voice');
-    const secret = map({ type: 'm.room.message', content: { msgtype: 'm.file', body: 'doc.pdf', file: { url: 'mxc://x/2' } } });
-    expect(secret?.kind).toEqual({ type: 'file', attachment: { body: 'doc.pdf', encrypted: true } });
+    // Ключ без хэша — не ключ: расшифровать, не проверив SHA-256, нельзя.
+    const broken = map({ type: 'm.room.message', content: { msgtype: 'm.file', body: 'doc.pdf', file: { url: 'mxc://x/2' } } });
+    expect(broken?.kind).toEqual({ type: 'file', attachment: { name: 'doc.pdf' } });
+  });
+
+  it('зашифрованное вложение: ключ и хэш — из `file`, открытый `url` рядом не слушаем; миниатюра — тоже', () => {
+    const key = { kty: 'oct', key_ops: ['encrypt', 'decrypt'], alg: 'A256CTR', k: 'KEY', ext: true };
+    const file = (url: string) => ({ url, key, iv: 'IV', hashes: { sha256: 'HASH' }, v: 'v2' });
+    const photo = map({
+      type: 'm.room.message',
+      content: {
+        msgtype: 'm.image',
+        body: 'Озеро',
+        filename: 'lake.jpg',
+        url: 'mxc://evil/plain',
+        file: file('mxc://x/cipher'),
+        info: { w: 1200, h: 800, thumbnail_file: file('mxc://x/thumb'), thumbnail_info: { w: 300, h: 200, mimetype: 'image/jpeg' } },
+      },
+    });
+    expect(photo?.kind).toEqual({
+      type: 'image',
+      attachment: {
+        name: 'lake.jpg',
+        caption: 'Озеро',
+        width: 1200,
+        height: 800,
+        source: { mxc: 'mxc://x/cipher', encryption: { key, iv: 'IV', hashes: { sha256: 'HASH' }, v: 'v2' } },
+        thumbnail: { source: { mxc: 'mxc://x/thumb', encryption: { key, iv: 'IV', hashes: { sha256: 'HASH' }, v: 'v2' } }, width: 300, height: 200, mimetype: 'image/jpeg' },
+      },
+    });
+    // Не `mxc://` — не источник.
+    const odd = map({ type: 'm.room.message', content: { msgtype: 'm.image', body: 'x', url: 'https://evil.example/x.jpg' } });
+    expect(odd?.kind).toEqual({ type: 'image', attachment: { name: 'x' } });
   });
 
   it('правка — не строка; реакция — не строка; редакция — не строка', () => {

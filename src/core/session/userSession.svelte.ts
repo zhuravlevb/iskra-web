@@ -21,6 +21,8 @@ import {
   type ValidatedAuthMetadata,
 } from 'matrix-js-sdk';
 import { fetchFor } from '../auth/server';
+import { MediaLoader } from '../media/media';
+import { uploadClientFor } from '../media/upload';
 import { ThumbnailCache } from '../media/thumbnails';
 import { RoomListStore } from '../rooms/roomListStore.svelte.ts';
 import { TimelineStore } from '../timeline/timelineStore.svelte.ts';
@@ -69,6 +71,8 @@ export class UserSession {
   readonly rooms: RoomListStore;
   /** Аватарки и миниатюры: с токеном, в памяти, с потолком. */
   readonly thumbnails: ThumbnailCache;
+  /** Вложения: превью в кэше, оригиналы — тому, кто показывает. */
+  readonly media: MediaLoader;
   /** Код восстановления и доступ к старой переписке. `null` — сессия без крипто (тесты). */
   readonly recovery: RecoveryStore | null;
   /** Сверка эмодзи с другим устройством. */
@@ -88,13 +92,19 @@ export class UserSession {
       accessToken: () => client.getAccessToken(),
       fetch: fetchFor(account.method === 'demo'),
     });
+    this.media = new MediaLoader({
+      downloadUrl: (mxc) => client.mxcUrlToHttp(mxc, undefined, undefined, undefined, false, true, true),
+      thumbnailUrl: (mxc, size) => client.mxcUrlToHttp(mxc, size, size, 'scale', false, true, true),
+      accessToken: () => client.getAccessToken(),
+      fetch: fetchFor(account.method === 'demo'),
+    });
     this.recovery = keys ? new RecoveryStore(client, keys) : null;
     this.verification = keys ? new VerificationStore(client) : null;
   }
 
   /** Лента комнаты. Живёт, пока открыт чат: тот, кто открыл, её и `destroy()`. */
   timeline(roomId: string): TimelineStore {
-    return new TimelineStore(this.client, roomId);
+    return new TimelineStore(this.client, roomId, uploadClientFor(this.client, this.account.method === 'demo' ? fetchFor(true) : undefined));
   }
 
   /** Черновик чата — под ключом аккаунта (`vault`). Не прочитался — пусто, а не ошибка. */
@@ -239,6 +249,7 @@ export class UserSession {
     this.rooms.destroy();
     this.verification?.destroy();
     this.thumbnails.clear();
+    this.media.clear();
     this.client.stopClient();
   }
 

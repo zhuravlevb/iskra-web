@@ -112,8 +112,8 @@
             <PollView poll={kind.poll} canVote={!!message.eventId} onvote={(ids) => actions.vote(message, ids)} />
           {:else}
             <span class="label">{attachmentLabel(kind)}</span>
-            {#if 'attachment' in kind && kind.attachment.body && kind.type === 'file'}
-              {kind.attachment.body}
+            {#if 'attachment' in kind && kind.attachment.name && kind.type === 'file'}
+              {kind.attachment.name}
             {/if}
           {/if}
           <span class="meta">

@@ -28,9 +28,24 @@ import {
   type MatrixClient,
   type Room,
 } from 'matrix-js-sdk';
+import { sendAttachment, uploadClientFor, type OutgoingFile, type UploadClient } from '../media/upload';
 import { mapEvent, type MapperContext } from './mapper';
 import { layout, type TimelineItem } from './layout';
 import type { Message, Reaction } from './message';
+
+/**
+ * Вложение в пути: загружается или не загрузилось. В ленте стоит своим пузырём с
+ * прогрессом, пока событие не отправлено; дальше его место занимает обычное эхо SDK.
+ */
+export interface Upload {
+  id: string;
+  file: OutgoingFile;
+  caption?: string;
+  replyTo?: { eventId: string; senderId: string; own: boolean };
+  /** 0…1 */
+  progress: number;
+  state: 'uploading' | 'failed';
+}
 
 /** Что не получилось — ключи текстов нативной Искры (`timeline.*Failed`). */
 export type TimelineFailure = 'reactionFailed' | 'deleteFailed' | 'editFailed' | 'pinFailed' | 'voteFailed';
@@ -65,6 +80,8 @@ export class TimelineStore {
   /** Последнее закреплённое — для полосы над лентой. Не загружено — достаём отдельно. */
   pinnedMessage = $state.raw<Message | undefined>(undefined);
   canPin = $state(false);
+  /** Вложения в пути — по порядку отправки. */
+  uploads = $state.raw<Upload[]>([]);
   /** Последнее действие не удалось — сказать и дать повторить. */
   failure = $state<TimelineFailure | null>(null);
 
@@ -84,10 +101,18 @@ export class TimelineStore {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   private readonly fetched = new Map<string, Message | null>();
   private typingSentAt = 0;
+  private readonly uploader: UploadClient;
+  // Служебное, не состояние: экран видит `uploads`.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  private readonly aborts = new Map<string, AbortController>();
+  /** Вложения уходят по одному: порядок в ленте — порядок, в котором их выбрали. */
+  private uploadQueue: Promise<void> = Promise.resolve();
+  private nextUpload = 0;
 
-  constructor(client: MatrixClient, roomId: string) {
+  constructor(client: MatrixClient, roomId: string, uploader?: UploadClient) {
     this.client = client;
     this.roomId = roomId;
+    this.uploader = uploader ?? uploadClientFor(client);
     this.ownUserId = client.getSafeUserId();
     this.listen();
     this.rebuild();
@@ -348,6 +373,72 @@ export class TimelineStore {
     // Промис не ждём: неудача видна в самом сообщении («Не отправлено»), а не исключением.
     this.client.sendMessage(this.roomId, content as never).catch(() => this.schedule());
     this.schedule();
+  }
+
+  // ————— Вложения —————
+
+  /**
+   * Файлы уходят по одному, подпись — с первым, ответ — тоже с первым. Путь наверх один —
+   * `sendAttachment`, и он сам решает, шифровать ли (см. `core/media/upload.ts`).
+   */
+  sendFiles(files: OutgoingFile[], caption?: string, replyTo?: Message): void {
+    this.typingStopped();
+    const reply = replyTo?.eventId ? { eventId: replyTo.eventId, senderId: replyTo.senderId, own: replyTo.own } : undefined;
+    files.forEach((file, index) => {
+      const upload: Upload = {
+        id: `upload-${this.nextUpload++}`,
+        file,
+        progress: 0,
+        state: 'uploading',
+        ...(index === 0 && caption?.trim() ? { caption: caption.trim() } : {}),
+        ...(index === 0 && reply ? { replyTo: reply } : {}),
+      };
+      this.uploads = [...this.uploads, upload];
+      this.enqueue(upload.id);
+    });
+  }
+
+  retryUpload(id: string): void {
+    this.patchUpload(id, { state: 'uploading', progress: 0 });
+    this.enqueue(id);
+  }
+
+  /** Отменить: идущая загрузка обрывается, не ушедшее — просто убирается. */
+  cancelUpload(id: string): void {
+    this.aborts.get(id)?.abort();
+    this.aborts.delete(id);
+    this.uploads = this.uploads.filter((u) => u.id !== id);
+  }
+
+  private enqueue(id: string): void {
+    this.uploadQueue = this.uploadQueue.then(() => this.runUpload(id));
+  }
+
+  private async runUpload(id: string): Promise<void> {
+    const upload = this.uploads.find((u) => u.id === id);
+    // Ушли из чата — загрузка всё равно доезжает: текст при уходе тоже уходит.
+    if (!upload) return;
+    const abort = new AbortController();
+    this.aborts.set(id, abort);
+    try {
+      await sendAttachment(this.uploader, this.roomId, upload.file, {
+        ...(upload.caption ? { caption: upload.caption } : {}),
+        ...(upload.replyTo ? { replyTo: upload.replyTo } : {}),
+        signal: abort.signal,
+        onProgress: (progress) => this.patchUpload(id, { progress }),
+      });
+      // Ушло — дальше это обычное событие ленты (эхо SDK), а не строка загрузки.
+      this.uploads = this.uploads.filter((u) => u.id !== id);
+    } catch {
+      if (!abort.signal.aborted) this.patchUpload(id, { state: 'failed' });
+    } finally {
+      this.aborts.delete(id);
+      this.schedule();
+    }
+  }
+
+  private patchUpload(id: string, patch: Partial<Upload>): void {
+    this.uploads = this.uploads.map((u) => (u.id === id ? { ...u, ...patch } : u));
   }
 
   /** Правка своего: новое тело в `m.new_content`, старое — со звёздочкой для старых клиентов. */

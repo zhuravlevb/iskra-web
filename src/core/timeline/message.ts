@@ -3,18 +3,37 @@
  * «Архитектура»); строится `TimelineMapper` и только им.
  */
 
+/**
+ * Ключ зашифрованного вложения — `EncryptedFile` из спецификации без `url`: JWK, IV и хэш
+ * шифротекста. Живёт в памяти ровно столько, сколько событие; на диск его пишет SDK, не мы.
+ */
+export interface EncryptedFileKey {
+  key: { kty: string; key_ops: string[]; alg: string; k: string; ext: boolean };
+  iv: string;
+  hashes: Record<string, string>;
+  v: string;
+}
+
+/** Где лежат байты: `mxc://`, и если вложение зашифровано — ключ к нему. */
+export interface MediaSource {
+  mxc: string;
+  encryption?: EncryptedFileKey;
+}
+
 export interface Attachment {
-  body: string;
+  /** Имя файла: `filename`, а если его нет — `body`. */
+  name: string;
+  /** Подпись (Matrix 1.10): `body`, когда рядом есть отдельное `filename`. */
+  caption?: string;
   mimetype?: string;
   size?: number;
   width?: number;
   height?: number;
   /** мс */
   duration?: number;
-  /** Незашифрованное вложение — `mxc://` прямо тут. */
-  url?: string;
-  /** Зашифрованное — `file` с ключом (этап 7). */
-  encrypted?: boolean;
+  /** Нет — вложение без байтов (битое событие): показать можно только подпись. */
+  source?: MediaSource;
+  thumbnail?: { source: MediaSource; width?: number; height?: number; mimetype?: string };
 }
 
 /**

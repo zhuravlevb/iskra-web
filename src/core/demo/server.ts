@@ -13,6 +13,7 @@
  * RFC 2606 не резолвится, и ни один запрос отсюда в сеть не уходит.
  */
 import { emptyAccount, mergeSignatures, type DemoAccountState, type DemoStorage } from './account';
+import { demoMediaLibrary, demoMxc, type DemoMedia } from './media';
 import {
   buildDemoWorld,
   demoCredentials,
@@ -88,6 +89,9 @@ export class DemoHomeserver {
   private readonly sent = new Map<string, string>();
   private sentCount = 0;
   private readonly failedOnce = new Set<string>();
+  /** mediaId → байты: нарисованные фикстуры и то, что загрузили. */
+  private readonly media: Map<string, DemoMedia> = demoMediaLibrary();
+  private nextMedia = 0;
 
   constructor(options: DemoServerOptions = {}) {
     this.variant = options.variant ?? 'full';
@@ -132,6 +136,10 @@ export class DemoHomeserver {
       ['GET', re(`${c}/v3/rooms/([^/]+)/joined_members`), (r) => this.joinedMembers(r.params[0]!)],
       ['PUT', re(`${c}/v3/rooms/([^/]+)/typing/([^/]+)`), () => json(200, {})],
       ['GET', re(`${c}/v1/media/config`), () => json(200, { 'm.upload.size': 50 * 1024 * 1024 })],
+      ['POST', re('/_matrix/media/v3/upload'), (r) => this.uploadMedia(r)],
+      ['GET', re(`${c}/v1/media/download/([^/]+)/([^/]+)(?:/[^/]*)?`), (r) => this.downloadMedia(r)],
+      // «Миниатюра» в демо — сам оригинал: SVG масштабируется сам.
+      ['GET', re(`${c}/v1/media/thumbnail/([^/]+)/([^/]+)`), (r) => this.downloadMedia(r)],
       ['GET', re(`${c}/v3/voip/turnServer`), () => json(200, {})],
       ['PUT', re(`${c}/v3/presence/([^/]+)/status`), () => json(200, {})],
       // Звонков (MatrixRTC) в демо нет — и SDK это спрашивает на старте.
@@ -174,8 +182,10 @@ export class DemoHomeserver {
       return json(404, { errcode: 'M_NOT_FOUND', error: 'Demo server does not leave itself' });
     }
 
-    const text = method === 'GET' || method === 'HEAD' ? '' : await request.text();
-    let body: unknown = undefined;
+    // Загрузка медиа — байты, а не текст: разобрать её как строку — испортить.
+    const binary = url.pathname === '/_matrix/media/v3/upload';
+    const text = method === 'GET' || method === 'HEAD' || binary ? '' : await request.text();
+    let body: unknown = binary ? { bytes: new Uint8Array(await request.arrayBuffer()), type: request.headers.get('Content-Type') ?? 'application/octet-stream' } : undefined;
     if (text) {
       try {
         body = JSON.parse(text);
@@ -709,6 +719,25 @@ export class DemoHomeserver {
       origin_server_ts: Date.now(),
     });
     return json(200, { event_id: eventId });
+  }
+
+  // ————— Медиа —————
+
+  private uploadMedia({ body }: DemoRequest): Response {
+    const media = body as DemoMedia | undefined;
+    if (!media?.bytes) return json(400, { errcode: 'M_BAD_JSON', error: 'No body' });
+    const id = `upload-${++this.nextMedia}`;
+    this.media.set(id, media);
+    return json(200, { content_uri: demoMxc(id) });
+  }
+
+  private downloadMedia({ params }: DemoRequest): Response {
+    const media = this.media.get(params[1] ?? '');
+    if (!media) return json(404, { errcode: 'M_NOT_FOUND', error: 'Not found' });
+    return new Response(media.bytes.slice(), {
+      status: 200,
+      headers: { 'Content-Type': media.type, 'Content-Length': String(media.bytes.byteLength) },
+    });
   }
 
   /** Одно событие по ID — закреплённое, которого нет среди загруженного. */

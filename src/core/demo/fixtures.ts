@@ -179,6 +179,27 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
         sender: vera,
         content: { 'm.relates_to': { rel_type: 'm.reference', event_id: '$weekend-4' }, 'm.selections': ['lake'] },
       },
+      {
+        type: 'm.room.message',
+        sender: vera,
+        content: {
+          msgtype: 'm.image',
+          body: 'Озеро прошлым летом',
+          filename: 'lake.svg',
+          url: `mxc://${DEMO_SERVER}/lake`,
+          info: { w: 1200, h: 800, mimetype: 'image/svg+xml' },
+        },
+      },
+      {
+        type: 'm.room.message',
+        sender: boris,
+        content: { msgtype: 'm.image', body: 'forest.svg', url: `mxc://${DEMO_SERVER}/forest`, info: { w: 800, h: 1000, mimetype: 'image/svg+xml' } },
+      },
+      {
+        type: 'm.room.message',
+        sender: boris,
+        content: { msgtype: 'm.file', body: 'Что взять.txt', url: `mxc://${DEMO_SERVER}/list`, info: { mimetype: 'text/plain', size: 96 } },
+      },
       text(vera, 'Алиса, ты с нами?', {
         format: 'org.matrix.custom.html',
         formatted_body: `<a href="https://matrix.to/#/${alice}">Алиса</a>, ты с нами?`,

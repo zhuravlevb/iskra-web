@@ -3,6 +3,8 @@ import { ClientEvent, createClient, PendingEventOrdering, SyncState, type Matrix
 import { DemoHomeserver, DEMO_SEND_FAILS_ONCE, DEMO_TYPING_MS, type DemoServerOptions } from '../../src/core/demo/server';
 import { demoRooms, demoUsers } from '../../src/core/demo/fixtures';
 import { TimelineStore } from '../../src/core/timeline/timelineStore.svelte.ts';
+import { uploadClientFor } from '../../src/core/media/upload';
+import { MediaLoader } from '../../src/core/media/media';
 import { quietLogger } from '../../src/core/support/logger';
 
 let client: MatrixClient | undefined;
@@ -18,7 +20,7 @@ afterEach(async () => {
   client = store = undefined;
 });
 
-async function started(options?: DemoServerOptions): Promise<{ client: MatrixClient; server: DemoHomeserver }> {
+async function started(options?: DemoServerOptions, crypto = false): Promise<{ client: MatrixClient; server: DemoHomeserver }> {
   const server = new DemoHomeserver(options);
   client = createClient({
     baseUrl: server.baseUrl,
@@ -28,6 +30,9 @@ async function started(options?: DemoServerOptions): Promise<{ client: MatrixCli
     deviceId: 'DEMODEVICE',
     accessToken: 'demo-token-DEMODEVICE',
   });
+  // Как в приложении: криптография — до первой синхронизации, иначе она не узнает о
+  // шифровании комнат из неё.
+  if (crypto) await client.initRustCrypto({ useIndexedDB: false });
   const prepared = new Promise<void>((resolve) => client!.on(ClientEvent.Sync, (s) => s === SyncState.Prepared && resolve()));
   await client.startClient({ initialSyncLimit: 20, pendingEventOrdering: PendingEventOrdering.Detached });
   await prepared;
@@ -250,4 +255,36 @@ describe('TimelineStore на демо-сервере', () => {
     const service = store.items.find((i) => i.kind === 'message' && i.message.kind.type === 'service');
     expect(service).toMatchObject({ message: { kind: { event: { type: 'joined', people: ['Борис', 'Вера'] } } } });
   });
+
+  it('вложение в зашифрованный чат: на сервере шифротекст, в событии `file` без `url`; обратно — расшифровано', async () => {
+    const { client, server } = await started(undefined, true);
+    store = new TimelineStore(client, demoRooms.anya, uploadClientFor(client, server.fetch));
+    const secret = 'координаты клада: под третьей сосной';
+    store.sendFiles([{ blob: new Blob([secret], { type: 'text/plain' }), name: 'клад.txt', mimetype: 'text/plain', kind: 'file' }], 'Только тебе');
+    expect(store.uploads).toHaveLength(1);
+    const sent = () => store!.messages.find((m) => m.kind.type === 'file' && !!m.eventId && m.delivery.state === 'sent');
+    await until(() => store!.uploads.length === 0 && !!sent(), 20_000);
+
+    const message = sent()!;
+    expect(message.kind).toMatchObject({ type: 'file', attachment: { name: 'клад.txt', caption: 'Только тебе' } });
+    const attachment = (message.kind as { attachment: { source: { mxc: string; encryption?: unknown } } }).attachment;
+    expect(attachment.source.encryption).toBeDefined();
+    const raw = client.getRoom(demoRooms.anya)!.findEventById(message.eventId!)!;
+    expect(raw.getWireType()).toBe('m.room.encrypted');
+    expect(raw.getContent()['url']).toBeUndefined();
+
+    // На сервере — ни байта открытого текста.
+    const stored = [...(server as unknown as { media: Map<string, { bytes: Uint8Array }> }).media.values()];
+    expect(stored.some((m) => new TextDecoder().decode(m.bytes).includes('клад'))).toBe(false);
+
+    const loader = new MediaLoader({
+      downloadUrl: (mxc) => client.mxcUrlToHttp(mxc, undefined, undefined, undefined, false, true, true),
+      thumbnailUrl: () => null,
+      accessToken: () => client.getAccessToken(),
+      fetch: server.fetch,
+    });
+    const blob = await loader.blob(attachment.source as never, 'text/plain');
+    expect(await blob.text()).toBe(secret);
+    expect(server.unknown).toEqual([]);
+  }, 30_000);
 });

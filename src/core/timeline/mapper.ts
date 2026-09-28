@@ -8,7 +8,7 @@
  */
 import { EventStatus, EventType, MsgType, type MatrixEvent } from 'matrix-js-sdk';
 import { isVideoNote } from '../rooms/preview';
-import type { Attachment, Delivery, Message, MessageKind, Poll, Reaction, ReplyPreview, SendFailure, ServiceEvent } from './message';
+import type { Attachment, Delivery, EncryptedFileKey, MediaSource, Message, MessageKind, Poll, Reaction, ReplyPreview, SendFailure, ServiceEvent } from './message';
 
 export interface MapperContext {
   ownUserId: string;
@@ -125,21 +125,56 @@ function messageKind(event: MatrixEvent): MessageKind {
 
 function attachmentOf(content: Record<string, unknown>): Attachment {
   const info = (content['info'] ?? {}) as Record<string, unknown>;
-  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-  const attachment: Attachment = { body: typeof content['body'] === 'string' ? content['body'] : '' };
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+  const body = typeof content['body'] === 'string' ? content['body'] : '';
+  const filename = typeof content['filename'] === 'string' && content['filename'] ? content['filename'] : undefined;
+  const attachment: Attachment = { name: filename ?? body };
+  // Подпись — `body`, когда имя файла лежит отдельно и с ним не совпадает (Matrix 1.10).
+  if (filename && body && body !== filename) attachment.caption = body;
   if (typeof info['mimetype'] === 'string') attachment.mimetype = info['mimetype'];
   const size = num(info['size']);
   if (size !== undefined) attachment.size = size;
   const w = num(info['w']);
   const h = num(info['h']);
-  if (w !== undefined) attachment.width = w;
-  if (h !== undefined) attachment.height = h;
+  if (w && h) {
+    attachment.width = w;
+    attachment.height = h;
+  }
   const duration = num(info['duration']);
   if (duration !== undefined) attachment.duration = duration;
-  if (typeof content['url'] === 'string') attachment.url = content['url'];
-  if (content['file']) attachment.encrypted = true;
+  const source = sourceOf(content['url'], content['file']);
+  if (source) attachment.source = source;
+  const thumbnail = sourceOf(info['thumbnail_url'], info['thumbnail_file']);
+  if (thumbnail) {
+    const thumbInfo = (info['thumbnail_info'] ?? {}) as Record<string, unknown>;
+    const tw = num(thumbInfo['w']);
+    const th = num(thumbInfo['h']);
+    attachment.thumbnail = {
+      source: thumbnail,
+      ...(tw && th ? { width: tw, height: th } : {}),
+      ...(typeof thumbInfo['mimetype'] === 'string' ? { mimetype: thumbInfo['mimetype'] } : {}),
+    };
+  }
   return attachment;
 }
+
+/**
+ * `url` — открытое вложение; `file` — зашифрованное, с ключом. Если есть `file`, `url`
+ * рядом не смотрим: байты по нему — шифротекст, а открытого адреса у такого вложения не
+ * бывает. Ключ без SHA-256 — не ключ: расшифровать, не проверив хэш, нельзя.
+ */
+function sourceOf(url: unknown, file: unknown): MediaSource | undefined {
+  if (file && typeof file === 'object') {
+    const f = file as Record<string, unknown>;
+    const key = f['key'] as EncryptedFileKey['key'] | undefined;
+    const hashes = f['hashes'] as Record<string, string> | undefined;
+    if (typeof f['url'] !== 'string' || !isMxc(f['url']) || !key?.k || typeof f['iv'] !== 'string' || !hashes?.['sha256']) return undefined;
+    return { mxc: f['url'], encryption: { key, iv: f['iv'], hashes, v: typeof f['v'] === 'string' ? f['v'] : 'v2' } };
+  }
+  return typeof url === 'string' && isMxc(url) ? { mxc: url } : undefined;
+}
+
+const isMxc = (value: string) => /^mxc:\/\/[^/]+\/[^/]+$/.test(value);
 
 /**
  * Опрос — вопрос, ответы и итог. Голос каждого — его *последний* ответ до конца опроса;

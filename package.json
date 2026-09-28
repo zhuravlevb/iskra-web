@@ -17,6 +17,7 @@
   "dependencies": {
     "blobatar": "2.7.0",
     "dompurify": "^3.4.16",
+    "matrix-encrypt-attachment": "^1.0.3",
     "matrix-js-sdk": "^42.4.0"
   },
   "devDependencies": {
