@@ -33,7 +33,7 @@ export class ScrollAnchor {
   private anchorOffset = 0;
   private seenTop = 0;
   private readonly observer: ResizeObserver;
-  private readonly onScroll = () => this.sync(true);
+  private readonly onScroll = () => this.sync();
 
   constructor(
     private readonly container: HTMLElement,
@@ -42,10 +42,10 @@ export class ScrollAnchor {
   ) {
     container.style.overflowAnchor = 'none';
     container.addEventListener('scroll', this.onScroll, { passive: true });
-    this.observer = new ResizeObserver(() => this.sync(false));
+    this.observer = new ResizeObserver(() => this.sync());
     this.observer.observe(container);
     this.observer.observe(content);
-    this.sync(false);
+    this.sync();
   }
 
   private top(element: Element): number {
@@ -53,29 +53,42 @@ export class ScrollAnchor {
   }
 
   /**
-   * Одна сверка на всё — и на прокрутку, и на изменение раскладки, потому что браузеры
-   * присылают их в разном порядке: раскладка может поменяться до того, как придёт событие
-   * прокрутки, и наоборот.
+   * Сверка после прокрутки или изменения раскладки. Браузеры присылают их в разном порядке,
+   * поэтому правило одно:
    *
-   * 1. Сдвиг раскладки: где якорь в содержимом сейчас против того, где он был, — эту разницу
-   *    прокрутка компенсирует. Прокрутку человека это не трогает: она двигает окно, а не
-   *    якорь в содержимом.
-   * 2. Внизу и что-то выросло — остаёмся внизу.
-   * 3. Запомнить новое положение.
+   * - прокрутка сдвинулась с тех пор, как якорь её видел, — это человек: запомнить, где он
+   *   теперь, и ничего не двигать;
+   * - не сдвинулась — это раскладка: внизу — остаться внизу, иначе вернуть якорный элемент
+   *   туда, где он был.
+   *
+   * Свои изменения ленты (подгрузка истории, новое сообщение) экран объявляет заранее —
+   * `capture()` до того, как DOM поменяется, — и тогда якорь снят с положения человека, а не
+   * с середины перестройки.
    */
-  private sync(fromScroll: boolean): void {
+  private sync(): void {
     const container = this.container;
-    if (this.stick && !fromScroll) {
-      container.scrollTop = container.scrollHeight;
-    } else if (this.anchorKey) {
-      const el = this.content.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(this.anchorKey)}"]`);
-      if (el) {
-        const now = container.scrollTop;
-        const shift = now + this.top(el) - (this.seenTop + this.anchorOffset);
-        if (Math.abs(shift) > 0.5) container.scrollTop = now + shift;
+    const moved = Math.abs(container.scrollTop - this.seenTop) > 1;
+    if (!moved) {
+      if (this.stick) {
+        container.scrollTop = container.scrollHeight;
+      } else if (this.anchorKey) {
+        const el = this.content.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(this.anchorKey)}"]`);
+        if (el) {
+          const shift = this.top(el) - this.anchorOffset;
+          if (Math.abs(shift) > 0.5) container.scrollTop += shift;
+        }
       }
     }
     this.measure();
+  }
+
+  /**
+   * Лента сейчас поменяется — запомнить место чтения до перемены. Это та же сверка, а не
+   * просто замер: прошлая перемена могла уже лечь в DOM, а наблюдатель — ещё не успеть, и
+   * замер без компенсации принял бы сдвинутое положение за правильное.
+   */
+  capture(): void {
+    this.sync();
   }
 
   private measure(): void {
@@ -111,7 +124,8 @@ export class ScrollAnchor {
   /** «Вниз, к последнему сообщению». */
   scrollToBottom(): void {
     this.stick = true;
-    this.sync(false);
+    this.container.scrollTop = this.container.scrollHeight;
+    this.measure();
   }
 
   /** Сколько содержимого — меньше ли окна (плюс запас): тогда нужна ещё история. */

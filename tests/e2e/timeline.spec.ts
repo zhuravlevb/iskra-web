@@ -70,26 +70,21 @@ test('история: окно наполняется, прокрутка вве
   // Внизу — последнее сообщение.
   await expect(page.getByRole('log').getByText('Сообщение номер 400', { exact: true })).toBeInViewport();
 
-  // Вверх: запоминаем, где стоит одно сообщение, листаем к верху, ждём подгрузки.
+  // Вверх до упора. В тот же момент (подгрузка ещё не пришла) запоминаем верхнее видимое
+  // сообщение — ровно то, что держит якорь, — и где оно стоит.
   const count = () => page.locator('.item').count();
   const before = await count();
-  await scroller.evaluate((el) => (el.scrollTop = 500));
-  // Метка — сообщение, а не разделитель дня: разделитель и не должен держать место
-  // (подгруженное того же дня встаёт под него), а где он окажется, зависит от времени суток.
-  const marker = page.locator('.item[data-anchor]').nth(5);
-  const markerKey = (await marker.getAttribute('data-anchor'))!;
-  const y1 = (await marker.boundingBox())!.y;
-  await scroller.evaluate((el) => (el.scrollTop = 0));
-  await scroller.evaluate((el) => el.dispatchEvent(new Event('scroll')));
+  const marker = await scroller.evaluate((el) => {
+    el.scrollTop = 0;
+    const top = el.getBoundingClientRect().top;
+    const first = [...el.querySelectorAll<HTMLElement>('[data-anchor]')].find((item) => item.getBoundingClientRect().bottom > top)!;
+    return { key: first.dataset['anchor']!, y: first.getBoundingClientRect().top };
+  });
   await expect.poll(count).toBeGreaterThan(before);
-  // Помеченное сообщение не уехало: подгрузка сверху не сдвинула то, что на экране
-  // (сдвиг — на 500 пикселей нашей же прокрутки к верху). Допуск — одна оценочная строка
-  // (3rem): строки между верхом и меткой, которые браузер ещё не рисовал
-  // (`content-visibility`), получают свою настоящую высоту, когда показываются. Прыжок
-  // же, который ловит тест, — это высота подгруженной страницы: полторы тысячи пикселей.
-  const again = page.locator(`.item[data-anchor="${markerKey}"]`);
-  const y2 = (await again.boundingBox())!.y;
-  expect(Math.abs(y2 - (y1 + 500))).toBeLessThan(48);
+  // История пришла сверху — а сообщение, на которое человек смотрел, осталось, где было.
+  await expect
+    .poll(async () => Math.abs((await page.locator(`.item[data-anchor="${marker.key}"]`).boundingBox())!.y - marker.y))
+    .toBeLessThan(2);
 });
 
 test('ширина окна меняется — место чтения остаётся', async ({ page }, info) => {
@@ -97,21 +92,26 @@ test('ширина окна меняется — место чтения ост�
   await signInToDemo(page);
   await openRoom(page, /^Длинная история/);
   const scroller = page.locator('.scroller');
-  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight > el.clientHeight * 2)).toBe(true);
-  await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight / 2));
+  // Ленты должно хватать на честную середину: подгружаем ещё страницу-другую.
+  await scroller.evaluate((el) => (el.scrollTop = 0));
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight > el.clientHeight * 3)).toBe(true);
+  // В середину — дальше 400 px от верха (там подгрузка) и 80 px от низа (там «прилипание»).
+  await scroller.evaluate((el) => (el.scrollTop = (el.scrollHeight - el.clientHeight) / 2));
   await page.waitForTimeout(100);
-  const top = page.locator('.item').filter({ hasText: 'Сообщение номер' });
-  const visible = await top.evaluateAll((els) => {
-    const box = document.querySelector('.scroller')!.getBoundingClientRect();
-    const el = els.find((e) => e.getBoundingClientRect().bottom > box.top + 1)!;
-    return { text: el.textContent!.match(/Сообщение номер \d+/)![0], offset: el.getBoundingClientRect().top - box.top };
-  });
+  // Верхнее видимое сообщение и его отступ от верха окна — по data-anchor, как у якоря.
+  const firstVisible = () =>
+    scroller.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const item = [...el.querySelectorAll<HTMLElement>('[data-anchor]')].find((i) => i.getBoundingClientRect().bottom > box.top)!;
+      return { key: item.dataset['anchor']!, offset: item.getBoundingClientRect().top - box.top };
+    });
+  const before = await firstVisible();
   await page.setViewportSize({ width: 800, height: 900 });
-  await page.waitForTimeout(200);
-  const after = await page.evaluate((text) => {
-    const box = document.querySelector('.scroller')!.getBoundingClientRect();
-    const el = [...document.querySelectorAll('.item')].find((e) => e.textContent!.includes(text + ' ') || e.textContent!.endsWith(text) || new RegExp(text + '\\D').test(e.textContent!))!;
-    return el.getBoundingClientRect().top - box.top;
-  }, visible.text);
-  expect(Math.abs(after - visible.offset)).toBeLessThan(8);
+  // Строки переносятся иначе, пузыри меняют высоту — а читаемое сообщение остаётся на месте.
+  await expect
+    .poll(() => scroller.evaluate((el, key) => {
+      const box = el.getBoundingClientRect();
+      return document.querySelector(`[data-anchor="${key}"]`)!.getBoundingClientRect().top - box.top;
+    }, before.key))
+    .toBeCloseTo(before.offset, 0);
 });

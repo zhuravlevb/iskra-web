@@ -56,6 +56,12 @@
     };
   });
 
+  // Лента поменяется (подгрузка, новое сообщение) — якорь снимается до перемены DOM.
+  $effect.pre(() => {
+    void store.items;
+    anchor?.capture();
+  });
+
   // Прочитано: чат на экране, окно в фокусе, человек внизу.
   function maybeMarkRead() {
     if (anchor?.atBottom && document.visibilityState === 'visible' && document.hasFocus()) store.markRead();
@@ -97,9 +103,6 @@
 <div class="timeline">
 <div class="scroller" bind:this={container}>
   <div class="content" bind:this={content} role="log" aria-live="off" aria-label={t('room.timeline')}>
-    {#if store.loadingMore}
-      <p class="loading" role="status">{t('room.loadingHistory')}</p>
-    {/if}
     {#if store.loadFailed}
       <div class="problem">
         <EmptyState title={t('room.loadFailedTitle')} message={t('room.loadFailedMessage')} />
@@ -111,6 +114,8 @@
     {#each store.items as item (item.key)}
       <!-- Якорь — только сообщения. Разделитель дня — нет: подгруженная история того же дня
            встаёт под него, и он остаётся на месте, пока всё под ним уезжает. -->
+      <!-- Без `content-visibility`: оценочная высота ещё не нарисованных строк у верхнего
+           края сдвигала якорь на разницу с настоящей — ровно тот прыжок, который мы ловим. -->
       <div class="item" data-anchor={item.kind === 'message' ? item.key : undefined}>
         {#if item.kind === 'day'}
           <p class="day"><span>{dayLabel(item.ts, now, i18n.locale, t('room.today'), t('room.yesterday'))}</span></p>
@@ -129,6 +134,11 @@
     {/each}
   </div>
 </div>
+
+{#if store.loadingMore}
+  <!-- Плашкой поверх, а не строкой в ленте: строка сверху сдвинула бы то, что читают. -->
+  <p class="loading" role="status">{t('room.loadingHistory')}</p>
+{/if}
 
 {#if anchor && !anchor.atBottom}
   <button type="button" class="to-bottom" aria-label={t('room.scrollToBottom')} title={t('room.scrollToBottom')} onclick={() => anchor?.scrollToBottom()}>
@@ -162,12 +172,6 @@
     padding: var(--space-normal) var(--timeline-gutter);
     justify-content: flex-end;
   }
-  .item {
-    /* Длинная переписка: вне экрана не раскладывается и не рисуется. Размер «auto»
-       браузер запоминает после первой раскладки — якорь это переживает. */
-    content-visibility: auto;
-    contain-intrinsic-size: auto 3rem;
-  }
   .day {
     display: flex;
     justify-content: center;
@@ -181,10 +185,17 @@
     color: var(--color-text-secondary);
   }
   .loading {
-    margin: var(--space-close) 0;
-    text-align: center;
+    position: absolute;
+    inset-block-start: var(--space-close);
+    inset-inline: 0;
+    width: fit-content;
+    margin: 0 auto;
+    padding: var(--space-tight) var(--space-normal);
+    border-radius: var(--radius-circle);
+    background: var(--color-glass-opaque);
     font-size: var(--font-size-caption);
     color: var(--color-text-secondary);
+    pointer-events: none;
   }
   .problem {
     display: flex;
