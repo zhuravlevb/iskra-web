@@ -47,6 +47,11 @@ function recordConsole(page: Page): string[] {
   return lines;
 }
 
+/** Консоль и переходы страницы — для теста, который хочет рассказать, почему упал. */
+export function consoleOf(page: Page): string[] {
+  return recordConsole(page);
+}
+
 /**
  * Вход в демо: alice / password — и шаг восстановления после него. Новый аккаунт получает
  * код (его и возвращаем); аккаунт, у которого код уже есть, шаг откладывает («Закрыть») —
