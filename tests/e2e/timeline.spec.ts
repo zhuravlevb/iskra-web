@@ -83,10 +83,13 @@ test('история: окно наполняется, прокрутка вве
   await scroller.evaluate((el) => el.dispatchEvent(new Event('scroll')));
   await expect.poll(count).toBeGreaterThan(before);
   // Помеченное сообщение не уехало: подгрузка сверху не сдвинула то, что на экране
-  // (сдвиг — ровно на 500 пикселей нашей же прокрутки к верху).
+  // (сдвиг — на 500 пикселей нашей же прокрутки к верху). Допуск — одна оценочная строка
+  // (3rem): строки между верхом и меткой, которые браузер ещё не рисовал
+  // (`content-visibility`), получают свою настоящую высоту, когда показываются. Прыжок
+  // же, который ловит тест, — это высота подгруженной страницы: полторы тысячи пикселей.
   const again = page.locator(`.item[data-anchor="${markerKey}"]`);
   const y2 = (await again.boundingBox())!.y;
-  expect(Math.abs(y2 - (y1 + 500))).toBeLessThan(4);
+  expect(Math.abs(y2 - (y1 + 500))).toBeLessThan(48);
 });
 
 test('ширина окна меняется — место чтения остаётся', async ({ page }, info) => {

@@ -29,10 +29,11 @@ export class ScrollAnchor {
 
   private stick = true;
   private anchorKey: string | null = null;
+  /** Где был якорь от верха окна, когда прокрутка стояла на `seenTop`. */
   private anchorOffset = 0;
-  private restoring = false;
+  private seenTop = 0;
   private readonly observer: ResizeObserver;
-  private readonly onScroll = () => this.record();
+  private readonly onScroll = () => this.sync(true);
 
   constructor(
     private readonly container: HTMLElement,
@@ -41,35 +42,58 @@ export class ScrollAnchor {
   ) {
     container.style.overflowAnchor = 'none';
     container.addEventListener('scroll', this.onScroll, { passive: true });
-    this.observer = new ResizeObserver(() => this.restore());
+    this.observer = new ResizeObserver(() => this.sync(false));
     this.observer.observe(container);
     this.observer.observe(content);
-    this.restore();
+    this.sync(false);
   }
 
   private top(element: Element): number {
     return element.getBoundingClientRect().top - this.container.getBoundingClientRect().top;
   }
 
-  private record(): void {
-    if (this.restoring) {
-      this.restoring = false;
-      return;
+  /**
+   * Одна сверка на всё — и на прокрутку, и на изменение раскладки, потому что браузеры
+   * присылают их в разном порядке: раскладка может поменяться до того, как придёт событие
+   * прокрутки, и наоборот.
+   *
+   * 1. Сдвиг раскладки: где якорь в содержимом сейчас против того, где он был, — эту разницу
+   *    прокрутка компенсирует. Прокрутку человека это не трогает: она двигает окно, а не
+   *    якорь в содержимом.
+   * 2. Внизу и что-то выросло — остаёмся внизу.
+   * 3. Запомнить новое положение.
+   */
+  private sync(fromScroll: boolean): void {
+    const container = this.container;
+    if (this.stick && !fromScroll) {
+      container.scrollTop = container.scrollHeight;
+    } else if (this.anchorKey) {
+      const el = this.content.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(this.anchorKey)}"]`);
+      if (el) {
+        const now = container.scrollTop;
+        const shift = now + this.top(el) - (this.seenTop + this.anchorOffset);
+        if (Math.abs(shift) > 0.5) container.scrollTop = now + shift;
+      }
     }
+    this.measure();
+  }
+
+  private measure(): void {
     const { scrollTop, scrollHeight, clientHeight } = this.container;
+    this.seenTop = scrollTop;
     this.stick = scrollHeight - scrollTop - clientHeight <= this.options.bottomReach;
     this.atBottom = this.stick;
 
     // Первый элемент, чей низ ниже верха окна, — двоичным поиском: их могут быть тысячи.
     const items = this.content.querySelectorAll<HTMLElement>('[data-anchor]');
+    const containerTop = this.container.getBoundingClientRect().top;
     let lo = 0;
     let hi = items.length - 1;
     let found: HTMLElement | null = null;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
       const el = items[mid]!;
-      const rect = el.getBoundingClientRect();
-      if (rect.bottom - this.container.getBoundingClientRect().top > 0) {
+      if (el.getBoundingClientRect().bottom - containerTop > 0) {
         found = el;
         hi = mid - 1;
       } else {
@@ -84,24 +108,10 @@ export class ScrollAnchor {
     if (scrollTop <= this.options.topReach) this.options.onNearTop();
   }
 
-  /** Вернуть место чтения после любого изменения раскладки. */
-  restore(): void {
-    const before = this.container.scrollTop;
-    if (this.stick) {
-      this.container.scrollTop = this.container.scrollHeight;
-    } else if (this.anchorKey) {
-      const el = this.content.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(this.anchorKey)}"]`);
-      if (el) this.container.scrollTop += this.top(el) - this.anchorOffset;
-    }
-    // Своя прокрутка не должна переписать якорь промежуточным положением.
-    if (this.container.scrollTop !== before) this.restoring = true;
-  }
-
   /** «Вниз, к последнему сообщению». */
   scrollToBottom(): void {
     this.stick = true;
-    this.atBottom = true;
-    this.restore();
+    this.sync(false);
   }
 
   /** Сколько содержимого — меньше ли окна (плюс запас): тогда нужна ещё история. */

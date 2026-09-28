@@ -34,6 +34,7 @@ function recordConsole(page: Page): string[] {
     consoles.set(page, record);
     page.on('console', (m) => record.push(`[${m.type()}] ${m.text()}`));
     page.on('pageerror', (e) => record.push(`[pageerror] ${e.message}`));
+    page.on('framenavigated', (f) => f === page.mainFrame() && record.push(`[navigated] ${f.url()}`));
   }
   return lines;
 }
@@ -52,7 +53,10 @@ export async function signInToDemo(page: Page): Promise<void> {
   } catch (error) {
     // Логи CI не показывают экран — пусть покажет ошибка.
     const snapshot = await page.locator('body').ariaSnapshot().catch(() => '(нет снимка)');
-    throw new Error(`Вход в демо завис после «Продолжить».\nЭкран:\n${snapshot}\nКонсоль:\n${log.slice(-30).join('\n')}`, { cause: error });
+    throw new Error(
+      `Вход в демо завис после «Продолжить».\nАдрес: ${page.url()}\nЭкран:\n${snapshot}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
+      { cause: error },
+    );
   }
   // Если сервер не нашёлся — сказать, что написано на экране, а не упасть по таймауту.
   if (await problem.isVisible()) throw new Error(`Вход в демо: ${await problem.innerText()}`);
