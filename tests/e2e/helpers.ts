@@ -76,7 +76,16 @@ export async function submitAddress(page: Page, address: string): Promise<void> 
 export async function enterDemoCredentials(page: Page): Promise<void> {
   const log = recordConsole(page);
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  } catch (error) {
+    // Firefox в CI однажды не дождался и DOMContentLoaded. Он приходит после того, как
+    // исполнены модули бандла, — значит, какой-то из них не пришёл. Какой — скажет ошибка.
+    throw new Error(
+      `Страница не загрузилась.\nНе закончились: ${[...(pending.get(page) ?? [])].join(', ') || '—'}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
+      { cause: error },
+    );
+  }
   await submitAddress(page, DEMO_ADDRESS);
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
   const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });
