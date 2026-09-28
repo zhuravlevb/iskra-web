@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { isPhone, signInToDemo, watchForProblems } from './helpers';
+import { consoleOf, isPhone, signInToDemo, watchForProblems } from './helpers';
+
+// Упал — показать консоль: падения в Firefox воспроизводятся только в CI.
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) console.log(`Консоль «${info.title}»:\n${consoleOf(page).slice(-40).join('\n')}`);
+});
 
 /** Настоящая PNG 32×20 — градиент. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACAAAAAUCAIAAABj86gYAAAEqUlEQVR42g3Noc9EYADAYU2xiSZdI14QLr5RsYkmXXPRplx8o2ITTfIrJtoU8Y1XbCJNMtGmqN/3/AOPpmnoGqaGpfHQcDWeGi8NoeFrhBqRxlvjo5FqfDWkRq5RalQajUan0WuMGkrjpzFrLBqbxqFxatwammagG5gGlsHDwDV4GrwMhIFvEBpEBm+Dj0Fq8DWQBrlBaVAZNAadQW8wGiiDn8FssBhsBofBaXAb/4GNbmPaWDYPG9fmafOyETa+TWgT2bxtPjapzddG2uQ2pU1l09h0Nr3NaKNsfjazzWKz2Rw2p81t/wcOuoPpYDk8HFyHp8PLQTj4DqFD5PB2+DikDl8H6ZA7lA6VQ+PQOfQOo4Ny+DnMDovD5nA4nA638x946B6mh+Xx8HA9nh4vD+Hhe4Qekcfb4+ORenw9pEfuUXpUHo1H59F7jB7K4+cxeywem8fhcXrc3n8g0AWmwBI8BK7gKXgJhMAXhIJI8BZ8BKngK5CCXFAKKkEj6AS9YBQowU8wCxbBJjgEp+AW/0GAHmAGWAGPADfgGfAKEAF+QBgQBbwDPgFpwDdABuQBZUAV0AR0AX3AGKACfgFzwBKwBRwBZ8Ad/AcxeowZY8U8YtyYZ8wrRsT4MWFMFPOO+cSkMd8YGZPHlDFVTBPTxfQxY4yK+cXMMUvMFnPEnDF3/B8k6AlmgpXwSHATngmvBJHgJ4QJUcI74ZOQJnwTZEKeUCZUCU1Cl9AnjAkq4ZcwJywJW8KRcCbcyX+QoWeYGVbGI8PNeGa8MkSGnxFmRBnvjE9GmvHNkBl5RplRZTQZXUafMWaojF/GnLFkbBlHxplxZ/+BRJeYEkvykLiSp+QlERJfEkoiyVvykaSSr0RKckkpqSSNpJP0klGiJD/JLFkkm+SQnJJb/gcFeoFZYBU8CtyCZ8GrQBT4BWFBVPAu+BSkBd8CWZAXlAVVQVPQFfQFY4Eq+BXMBUvBVnAUnAV38R/U6DVmjVXzqHFrnjWvGlHj14Q1Uc275lOT1nxrZE1eU9ZUNU1NV9PXjDWq5lcz1yw1W81Rc9bc9X/QoreYLVbLo8Vteba8WkSL3xK2RC3vlk9L2vJtkS15S9lStTQtXUvfMraoll/L3LK0bC1Hy9lyt//BgD5gDlgDjwF34DnwGhAD/kA4EA28Bz4D6cB3QA7kA+VANdAMdAP9wDigBn4D88AysA0cA+fAPfwHCl1hKizFQ+EqnoqXQih8RaiIFG/FR5EqvgqpyBWlolI0ik7RK0aFUvwUs2JRbIpDcSpu9R9M6BPmhDXxmHAnnhOvCTHhT4QT0cR74jORTnwn5EQ+UU5UE81EN9FPjBNq4jcxTywT28QxcU7c03+woq+YK9bKY8Vdea68VsSKvxKuRCvvlc9KuvJdkSv5SrlSrTQr3Uq/Mq6old/KvLKsbCvHyrlyr//Bjr5j7lg7jx1357nz2hE7/k64E+28dz476c53R+7kO+VOtdPsdDv9zrijdn47886ys+0cO+fOvf8HF/qFeWFdPC7ci+fF60Jc+BfhRXTxvvhcpBffC3mRX5QX1UVz0V30F+OFuvhdzBfLxXZxXJwX98Uf1wfxouWu4FQAAAAASUVORK5CYII=', 'base64');

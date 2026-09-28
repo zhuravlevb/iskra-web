@@ -39,6 +39,17 @@ jobs:
       - run: pnpm e2e
         env:
           PW_ENGINES: ${{ matrix.engine }}
+      # Артефакты из CI достать не всегда можно — снимок страницы на момент падения
+      # (дерево доступности) печатается прямо в лог.
+      - name: Снимки упавших тестов
+        if: failure()
+        run: |
+          for f in test-results/*/error-context.md; do
+            [ -f "$f" ] || continue
+            echo "::group::$f"
+            sed -n '/^# Page snapshot/,$p' "$f" | head -150
+            echo "::endgroup::"
+          done
       - uses: actions/upload-artifact@v5
         if: failure()
         with:

@@ -27,7 +27,9 @@ const browsers = {
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
-  reporter: process.env['CI'] ? 'github' : 'list',
+  // В CI — ещё и `list`: он печатает консоль упавшего теста, а без неё падение в Firefox,
+  // которого нет под рукой, — загадка.
+  reporter: process.env['CI'] ? [['github'], ['list']] : 'list',
   // Русский пишется первым — и проверяется первым.
   use: { baseURL: 'http://localhost:4173', locale: 'ru-RU' },
   webServer: {
