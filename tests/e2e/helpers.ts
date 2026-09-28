@@ -26,6 +26,8 @@ export function watchForProblems(page: Page): string[] {
 
 /** Вся консоль страницы — для диагностики падений в CI, где экрана не видно. */
 const consoles = new WeakMap<Page, string[]>();
+/** Запросы, которые начались и не закончились, — кто держит страницу недогруженной. */
+const pending = new WeakMap<Page, Set<string>>();
 function recordConsole(page: Page): string[] {
   let lines = consoles.get(page);
   if (!lines) {
@@ -35,6 +37,12 @@ function recordConsole(page: Page): string[] {
     page.on('console', (m) => record.push(`[${m.type()}] ${m.text()}`));
     page.on('pageerror', (e) => record.push(`[pageerror] ${e.message}`));
     page.on('framenavigated', (f) => f === page.mainFrame() && record.push(`[navigated] ${f.url()}`));
+    page.on('requestfailed', (r) => record.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText ?? ''}`));
+    const open = new Set<string>();
+    pending.set(page, open);
+    page.on('request', (r) => open.add(r.url()));
+    page.on('requestfinished', (r) => open.delete(r.url()));
+    page.on('requestfailed', (r) => open.delete(r.url()));
   }
   return lines;
 }
@@ -42,7 +50,8 @@ function recordConsole(page: Page): string[] {
 /** Вход в демо: alice / password. */
 export async function signInToDemo(page: Page): Promise<void> {
   const log = recordConsole(page);
-  await page.goto('/');
+  // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
   await page.getByRole('button', { name: 'Продолжить' }).click();
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
@@ -54,7 +63,7 @@ export async function signInToDemo(page: Page): Promise<void> {
     // Логи CI не показывают экран — пусть покажет ошибка.
     const snapshot = await page.locator('body').ariaSnapshot().catch(() => '(нет снимка)');
     throw new Error(
-      `Вход в демо завис после «Продолжить».\nАдрес: ${page.url()}\nЭкран:\n${snapshot}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
+      `Вход в демо завис после «Продолжить».\nАдрес: ${page.url()}\nНе закончились: ${[...(pending.get(page) ?? [])].join(', ') || '—'}\nЭкран:\n${snapshot}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
       { cause: error },
     );
   }

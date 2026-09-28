@@ -38,7 +38,7 @@ test('ширину списка можно менять с клавиатуры,
   await separator.focus();
   await page.keyboard.press('End');
   await expect(separator).toHaveAttribute('aria-valuenow', '25');
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('separator')).toHaveAttribute('aria-valuenow', '25');
   await page.getByRole('separator').dblclick();
   await expect(page.getByRole('separator')).toHaveAttribute('aria-valuenow', '20');

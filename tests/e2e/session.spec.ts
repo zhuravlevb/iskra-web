@@ -3,21 +3,21 @@ import { DEMO_ADDRESS, signInToDemo, watchForProblems } from './helpers';
 
 test('экран входа под строгой CSP, без ошибок', async ({ page }) => {
   const problems = watchForProblems(page);
-  const response = await page.goto('/');
+  const response = await page.goto('/', { waitUntil: 'domcontentloaded' });
   expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
   expect(problems).toEqual([]);
 });
 
 test('непонятный адрес — красная панель, а не тишина', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill('не адрес');
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('alert')).toContainText('По этому адресу мы ничего не нашли');
 });
 
 test('неверный пароль — сказано, и можно попробовать снова', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await page.getByRole('button', { name: 'У меня только логин и пароль' }).click();
@@ -31,7 +31,7 @@ test('вход в демо с Rust-крипто под CSP, сессия пер�
   const problems = watchForProblems(page);
   await signInToDemo(page);
 
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
 
   const databases = async () => (await page.evaluate(() => indexedDB.databases())).map((d) => d.name ?? '');
@@ -47,7 +47,7 @@ test('вход в демо с Rust-крипто под CSP, сессия пер�
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
 
   await expect.poll(async () => mine(await databases())).toEqual([]);
-  await page.reload();
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
   // Rust-крипто может ворчать в консоль при удалении своей базы на ходу — это не наша ошибка,
   // а вот нарушения CSP и падения страницы — наши.
@@ -58,7 +58,7 @@ test('вторая вкладка получает «уже открыта», и
   await signInToDemo(page);
 
   const second = await context.newPage();
-  await second.goto('/');
+  await second.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(second.getByRole('heading', { name: 'Iskra уже открыта в другом окне' })).toBeVisible({ timeout: 20_000 });
 
   await second.getByRole('button', { name: 'Открыть здесь' }).click();
