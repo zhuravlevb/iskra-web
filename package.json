@@ -15,6 +15,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "blobatar": "2.7.0",
     "matrix-js-sdk": "^42.4.0"
   },
   "devDependencies": {

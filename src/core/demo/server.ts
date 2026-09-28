@@ -21,6 +21,7 @@ import {
   demoUsers,
   DEMO_BASE_URL,
   type DemoEvent,
+  type DemoInvite,
   type DemoRoom,
 } from './fixtures';
 
@@ -58,7 +59,7 @@ export class DemoHomeserver {
   readonly unknown: string[] = [];
 
   private readonly rooms: Map<string, DemoRoom>;
-  private readonly invites;
+  private invites: DemoInvite[];
   private readonly initialLimit: number;
   private readonly slowDelayMs: number;
   private readonly filters = new Map<string, unknown>();
@@ -68,6 +69,9 @@ export class DemoHomeserver {
   private deviceKeys: Record<string, unknown> | undefined;
   private crossSigning: Record<string, unknown> = {};
   private oneTimeKeys = 0;
+  /** Что отдать следующей синхронизацией: вход по приглашению, выход, отметки о прочтении. */
+  private pending: Array<Record<string, unknown>> = [];
+  private wake: (() => void) | undefined;
 
   constructor(options: DemoServerOptions = {}) {
     this.variant = options.variant ?? 'full';
@@ -97,6 +101,11 @@ export class DemoHomeserver {
       ['GET', re(`${c}/v3/sync`), (r) => this.sync(r)],
       ['GET', re(`${c}/v3/profile/([^/]+)`), (r) => this.profile(r)],
       ['GET', re(`${c}/v3/rooms/([^/]+)/messages`), (r) => this.messages(r)],
+      ['POST', re(`${c}/v3/join/([^/]+)`), (r) => this.join(r.params[0]!)],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/join`), (r) => this.join(r.params[0]!)],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/leave`), (r) => this.leave(r.params[0]!)],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/receipt/([^/]+)/([^/]+)`), (r) => this.receipt(r.params[0]!, r.params[2]!)],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/read_markers`), (r) => this.readMarkers(r)],
       ['GET', re(`${c}/v1/media/config`), () => json(200, { 'm.upload.size': 50 * 1024 * 1024 })],
       ['GET', re(`${c}/v3/voip/turnServer`), () => json(200, {})],
       ['PUT', re(`${c}/v3/presence/([^/]+)/status`), () => json(200, {})],
@@ -303,10 +312,17 @@ export class DemoHomeserver {
   private async sync({ url, signal }: DemoRequest): Promise<Response> {
     const since = url.searchParams.get('since');
     if (since) {
-      // Нового ничего нет: держим длинный опрос, как настоящий сервер, но недолго.
-      const timeout = Number(url.searchParams.get('timeout') ?? 0);
-      await delay(Math.min(timeout, LONG_POLL_CAP_MS), signal);
-      return json(200, { next_batch: `s${++this.batch}` });
+      // Нового ничего нет — держим длинный опрос, как настоящий сервер, но недолго;
+      // появилось (вошли по приглашению, прочитали) — отвечаем сразу.
+      if (this.pending.length === 0) {
+        const timeout = Number(url.searchParams.get('timeout') ?? 0);
+        await Promise.race([
+          delay(Math.min(timeout, LONG_POLL_CAP_MS), signal),
+          new Promise<void>((resolve) => (this.wake = resolve)),
+        ]);
+        this.wake = undefined;
+      }
+      return json(200, this.incrementalSync());
     }
     return json(200, this.initialSync());
   }
@@ -322,8 +338,8 @@ export class DemoHomeserver {
           limited: start > 0,
           prev_batch: `t${start}`,
         },
-        ephemeral: { events: [] },
-        account_data: { events: [] },
+        ephemeral: { events: room.readUpTo ? [receiptEvent(room.readUpTo)] : [] },
+        account_data: { events: room.tags ? [{ type: 'm.tag', content: { tags: room.tags } }] : [] },
         unread_notifications: {
           notification_count: room.unread?.notifications ?? 0,
           highlight_count: room.unread?.highlights ?? 0,
@@ -349,6 +365,98 @@ export class DemoHomeserver {
       device_lists: { changed: [], left: [] },
       device_one_time_keys_count: {},
     };
+  }
+
+  private incrementalSync() {
+    const join: Record<string, unknown> = {};
+    const leave: Record<string, unknown> = {};
+    for (const change of this.pending.splice(0)) {
+      const roomId = change['roomId'] as string;
+      if (change['kind'] === 'leave') leave[roomId] = change['body'];
+      else join[roomId] = mergeJoin(join[roomId] as Record<string, unknown> | undefined, change['body'] as Record<string, unknown>);
+    }
+    return { next_batch: `s${++this.batch}`, rooms: { join, invite: {}, leave } };
+  }
+
+  private enqueue(change: Record<string, unknown>): void {
+    this.pending.push(change);
+    this.wake?.();
+  }
+
+  /** Вход по приглашению: комната становится обычной, с Алисой среди участников. */
+  private join(roomIdOrAlias: string): Response {
+    const invite = this.invites.find((i) => i.roomId === roomIdOrAlias);
+    if (!invite && !this.rooms.has(roomIdOrAlias)) {
+      return json(404, { errcode: 'M_NOT_FOUND', error: 'No such room' });
+    }
+    if (invite) {
+      this.invites = this.invites.filter((i) => i !== invite);
+      const joinEvent: DemoEvent = {
+        type: 'm.room.member',
+        sender: demoUsers.alice,
+        state_key: demoUsers.alice,
+        content: { membership: 'join', displayname: demoProfiles[demoUsers.alice]?.displayname },
+        event_id: `$join-${invite.roomId}-${this.batch}`,
+        origin_server_ts: Date.now(),
+      };
+      const state = [
+        { type: 'm.room.create', sender: invite.inviteState[0]?.sender ?? demoUsers.alice, state_key: '', content: { room_version: '10' }, event_id: `$create-${invite.roomId}` },
+        ...invite.inviteState
+          .filter((e) => !(e.type === 'm.room.member' && e.state_key === demoUsers.alice))
+          .map((e, i) => ({ ...e, event_id: e.event_id ?? `$invite-state-${i}-${invite.roomId}` })),
+      ];
+      this.rooms.set(invite.roomId, { roomId: invite.roomId, state: [...state, joinEvent], timeline: [joinEvent] });
+      this.enqueue({
+        kind: 'join',
+        roomId: invite.roomId,
+        body: {
+          state: { events: state.map((e) => withDefaults(e)) },
+          timeline: { events: [withDefaults(joinEvent)], limited: false, prev_batch: 't0' },
+        },
+      });
+    }
+    return json(200, { room_id: roomIdOrAlias });
+  }
+
+  /** Выход или отказ от приглашения. */
+  private leave(roomId: string): Response {
+    const known = this.rooms.has(roomId) || this.invites.some((i) => i.roomId === roomId);
+    if (!known) return json(404, { errcode: 'M_NOT_FOUND', error: 'No such room' });
+    this.rooms.delete(roomId);
+    this.invites = this.invites.filter((i) => i.roomId !== roomId);
+    const leaveEvent = {
+      type: 'm.room.member',
+      sender: demoUsers.alice,
+      state_key: demoUsers.alice,
+      content: { membership: 'leave' },
+      event_id: `$leave-${roomId}-${this.batch}`,
+      origin_server_ts: Date.now(),
+      unsigned: {},
+    };
+    this.enqueue({ kind: 'leave', roomId, body: { state: { events: [] }, timeline: { events: [leaveEvent] } } });
+    return json(200, {});
+  }
+
+  private receipt(roomId: string, eventId: string): Response {
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    room.readUpTo = eventId;
+    room.unread = { notifications: 0, highlights: 0 };
+    this.enqueue({
+      kind: 'join',
+      roomId,
+      body: {
+        ephemeral: { events: [receiptEvent(eventId)] },
+        unread_notifications: { notification_count: 0, highlight_count: 0 },
+      },
+    });
+    return json(200, {});
+  }
+
+  private readMarkers({ params, body }: DemoRequest): Response {
+    const read = (body as Record<string, unknown> | undefined)?.['m.read'];
+    if (typeof read === 'string') return this.receipt(params[0]!, read);
+    return json(200, {});
   }
 
   private profile({ params }: DemoRequest): Response {
@@ -385,6 +493,24 @@ export class DemoHomeserver {
       ...(start === 0 ? { state: room.state.map((e) => withDefaults(e)) } : {}),
     });
   }
+}
+
+function receiptEvent(eventId: string) {
+  return {
+    type: 'm.receipt',
+    content: { [eventId]: { 'm.read': { [demoUsers.alice]: { ts: Date.now() } } } },
+  };
+}
+
+function mergeJoin(a: Record<string, unknown> | undefined, b: Record<string, unknown>): Record<string, unknown> {
+  if (!a) return b;
+  const merged: Record<string, unknown> = { ...a, ...b };
+  for (const key of ['state', 'timeline', 'ephemeral', 'account_data']) {
+    const left = (a[key] as { events?: unknown[] } | undefined)?.events ?? [];
+    const right = (b[key] as { events?: unknown[] } | undefined)?.events ?? [];
+    if (left.length || right.length) merged[key] = { ...(a[key] as object), ...(b[key] as object), events: [...left, ...right] };
+  }
+  return merged;
 }
 
 function withDefaults(event: DemoEvent): DemoEvent {

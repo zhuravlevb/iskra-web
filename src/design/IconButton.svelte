@@ -39,8 +39,11 @@
     color: var(--accent);
     cursor: pointer;
   }
-  .icon-button:hover {
-    background: var(--color-incoming-bubble);
+  /* Наведение — только там, где указатель умеет наводиться: на телефоне тап оставлял бы «залипшую» подсветку. */
+  @media (hover: hover) {
+    .icon-button:hover {
+      background: var(--color-incoming-bubble);
+    }
   }
   .icon-button[aria-pressed='true'] {
     background: var(--color-own-reaction);

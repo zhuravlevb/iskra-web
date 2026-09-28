@@ -1,6 +1,6 @@
 <!--
-  Оболочка вошедшего человека: раскладка в три ширины. Колонки пока пустые — список
-  чатов появится на этапе 3, лента — на этапе 4.
+  Оболочка вошедшего человека: раскладка в три ширины, список чатов, горячие клавиши
+  уровня приложения и число непрочитанных в заголовке вкладки. Лента — этап 4.
 -->
 <script lang="ts">
   import Columns from '../../design/Columns.svelte';
@@ -14,15 +14,74 @@
   import { app } from '../../core/session/app.svelte.ts';
   import type { UserSession } from '../../core/session/userSession.svelte.ts';
   import { t } from '../../i18n/index.svelte.ts';
+  import { describeHotkey, match } from '../../design/hotkeys';
+  import { hasUnread } from '../../core/rooms/types';
   import { preferences } from './preferences.svelte.ts';
   import OfflineStrip from './OfflineStrip.svelte';
   import StorageNotice from './StorageNotice.svelte';
+  import { showBadge } from './badge.svelte.ts';
+  import RoomList from '../rooms/RoomList.svelte';
+  import QuickSwitcher from '../rooms/QuickSwitcher.svelte';
+  import { roomName } from '../rooms/text';
 
   let { session }: { session: UserSession } = $props();
   let confirmingSignOut = $state(false);
+  let switching = $state(false);
 
   let panelOpen = $state(false);
   const roomId = $derived(router.route.name === 'room' ? router.route.roomId : null);
+  const room = $derived(roomId ? session.rooms.get(roomId) : undefined);
+  // Чат, которого нет в списке (чужая ссылка, ещё не синхронизирован), — показываем ID.
+  const title = $derived(room ? roomName(room) : (roomId ?? ''));
+
+  $effect(() => {
+    showBadge(session.rooms.badge, t('app.name'));
+  });
+  $effect(() => () => showBadge(0, t('app.name')));
+
+  /** Видимый порядок чатов — для Alt ↑/↓: как в списке, без архива и пространств. */
+  function visibleOrder() {
+    const { pinned, chats } = session.rooms.sections;
+    return [...pinned, ...chats];
+  }
+
+  function step(direction: 1 | -1, onlyUnread: boolean) {
+    const order = visibleOrder();
+    const at = order.findIndex((r) => r.id === roomId);
+    for (let i = at + direction; i >= 0 && i < order.length; i += direction) {
+      const candidate = order[i]!;
+      if (!onlyUnread || hasUnread(candidate) || candidate.mentionCount > 0) {
+        router.go({ name: 'room', roomId: candidate.id });
+        return;
+      }
+    }
+  }
+
+  function onkeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
+    const action = match(event);
+    if (!action) return;
+    switch (action) {
+      case 'quickSwitch':
+        switching = true;
+        break;
+      case 'previousChat':
+        step(-1, false);
+        break;
+      case 'nextChat':
+        step(1, false);
+        break;
+      case 'previousUnread':
+        step(-1, true);
+        break;
+      case 'nextUnread':
+        step(1, true);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  }
 
   function closeRoom() {
     panelOpen = false;
@@ -38,21 +97,26 @@
   resizeLabel={t('layout.resizeList')}
 >
   {#snippet list()}
-    <Bar title={t('roomList.title')}>
-      {#snippet trailing()}
-        <IconButton label={t('account.signOut')} onclick={() => (confirmingSignOut = true)}>
-          <Icon name="signOut" />
-        </IconButton>
-      {/snippet}
-    </Bar>
-    <OfflineStrip {session} />
-    <StorageNotice />
-    <EmptyState title={t('roomList.emptyTitle')} message={t('roomList.emptyMessage')} />
+    <div class="list-column">
+      <Bar title={t('roomList.title')}>
+        {#snippet trailing()}
+          <IconButton label={t('quickSwitch.label')} shortcut={describeHotkey('quickSwitch')} onclick={() => (switching = true)}>
+            <Icon name="search" />
+          </IconButton>
+          <IconButton label={t('account.signOut')} onclick={() => (confirmingSignOut = true)}>
+            <Icon name="signOut" />
+          </IconButton>
+        {/snippet}
+      </Bar>
+      <OfflineStrip {session} />
+      <StorageNotice />
+      <RoomList {session} />
+    </div>
   {/snippet}
 
   {#snippet main()}
     {#if roomId}
-      <Bar title={roomId}>
+      <Bar {title}>
         {#snippet leading()}
           {#if viewport.layout === 'stack'}
             <IconButton label={t('room.back')} onclick={closeRoom}><Icon name="back" /></IconButton>
@@ -78,6 +142,10 @@
   {/snippet}
 </Columns>
 
+<svelte:window {onkeydown} />
+
+<QuickSwitcher {session} open={switching} onclose={() => (switching = false)} />
+
 <ConfirmDialog
   open={confirmingSignOut}
   title={t('signOut.confirmTitle')}
@@ -91,3 +159,11 @@
     void app.signOut();
   }}
 />
+
+<style>
+  .list-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+</style>

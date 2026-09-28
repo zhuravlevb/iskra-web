@@ -32,7 +32,7 @@ test('вход в демо с Rust-крипто под CSP, сессия пер�
   await signInToDemo(page);
 
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Чаты' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
 
   const databases = async () => (await page.evaluate(() => indexedDB.databases())).map((d) => d.name ?? '');
   const mine = (names: string[]) => names.filter((n) => n.includes('@alice:demo.iskra.invalid'));
@@ -62,6 +62,6 @@ test('вторая вкладка получает «уже открыта», и
   await expect(second.getByRole('heading', { name: 'Iskra уже открыта в другом окне' })).toBeVisible({ timeout: 20_000 });
 
   await second.getByRole('button', { name: 'Открыть здесь' }).click();
-  await expect(second.getByRole('heading', { name: 'Чаты' })).toBeVisible({ timeout: 20_000 });
+  await expect(second.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: 'Iskra уже открыта в другом окне' })).toBeVisible();
 });

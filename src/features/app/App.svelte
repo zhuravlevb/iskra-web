@@ -40,7 +40,8 @@
 
   $effect(() => {
     document.documentElement.lang = i18n.locale;
-    document.title = t('app.name');
+    // Вошедшему заголовок ведёт `badge.svelte.ts` — с числом непрочитанных.
+    if (app.phase.name !== 'signed-in') document.title = t('app.name');
   });
 </script>
 

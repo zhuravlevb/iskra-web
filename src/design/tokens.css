@@ -48,7 +48,8 @@
   --size-avatar-toolbar: 2.25rem; /* 36 */
   --size-avatar-large: 4rem; /* 64 */
   --size-avatar-profile: 6rem; /* 96 */
-  --size-room-avatar: 3.5rem; /* 56 */
+  --size-room-avatar: 3.5rem; /* 56 — Theme.Size.roomAvatar; под мышью меньше, см. ниже */
+  --size-unread-badge: 1.25rem; /* 20 — Theme.Size.unreadBadge: высота значка и ширина «@» */
   --size-navigation-bar: 2.75rem; /* 44 */
   --size-sign-in-column: 26.25rem; /* 420 */
   --size-menu-width: 15rem; /* 240 */
@@ -84,14 +85,15 @@
    * с двумя значениями. По умолчанию — палец (так безопаснее для неизвестного ввода).
    */
   --tap-target: 3rem; /* 48 — палец */
-  --row-room: 4.5rem; /* 72 */
+  --row-room: 4.5rem; /* 72 = лицо 56 + 2 × 8 */
   --timeline-gutter: var(--space-roomy);
 }
 
 @media (hover: hover) and (pointer: fine) {
   :root {
     --tap-target: 2.25rem; /* 36 — мышь */
-    --row-room: 3.5rem; /* 56 */
+    --row-room: 3.5rem; /* 56 = лицо 40 + 2 × 8 */
+    --size-room-avatar: 2.5rem; /* 40 — под мышью строка ниже, лицо тоже */
     --timeline-gutter: var(--space-normal);
   }
 }
@@ -114,6 +116,11 @@
   --color-own-reaction: rgb(0 0 0 / 0.16);
   --color-danger: #ff3b30;
   --color-on-danger: #ffffff;
+  /* Значок беззвучного чата — сплошной серый, не полупрозрачность: точка в десять пикселей
+     из девяти процентов цвета текста — это пятно. */
+  --color-muted-badge: #8e8e93;
+  --color-on-muted-badge: #ffffff;
+  --color-selected: rgb(0 0 0 / 0.06);
   --color-focus: var(--accent);
 }
 
@@ -129,6 +136,7 @@
   --color-incoming-bubble: rgb(255 255 255 / 0.08);
   --color-own-reaction: rgb(255 255 255 / 0.16);
   --color-danger: #ff453a;
+  --color-selected: rgb(255 255 255 / 0.1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -144,5 +152,6 @@
     --color-incoming-bubble: rgb(255 255 255 / 0.08);
     --color-own-reaction: rgb(255 255 255 / 0.16);
     --color-danger: #ff453a;
+    --color-selected: rgb(255 255 255 / 0.1);
   }
 }

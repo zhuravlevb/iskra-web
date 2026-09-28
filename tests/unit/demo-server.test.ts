@@ -84,7 +84,7 @@ describe('демо-сервер под настоящим matrix-js-sdk', () => 
 
     const joined = c.getRooms().filter((r) => r.getMyMembership() === 'join');
     expect(joined.map((r) => r.roomId).sort()).toEqual(
-      [demoRooms.anya, demoRooms.weekend, demoRooms.quiet, demoRooms.history].sort(),
+      [demoRooms.anya, demoRooms.weekend, demoRooms.quiet, demoRooms.history, demoRooms.archived, demoRooms.family].sort(),
     );
     expect(c.getRoom(demoRooms.invite)?.getMyMembership()).toBe('invite');
     expect(c.getRoom(demoRooms.weekend)?.name).toBe('Выходные');

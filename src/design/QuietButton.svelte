@@ -16,8 +16,11 @@
     color: var(--accent);
     cursor: pointer;
   }
-  .quiet:hover {
-    background: var(--color-incoming-bubble);
+  /* Наведение — только там, где указатель умеет наводиться: на телефоне тап оставлял бы «залипшую» подсветку. */
+  @media (hover: hover) {
+    .quiet:hover {
+      background: var(--color-incoming-bubble);
+    }
   }
   .quiet:disabled {
     opacity: 0.5;

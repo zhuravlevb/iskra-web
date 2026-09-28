@@ -7,6 +7,7 @@
     back: 'M15 5l-7 7 7 7',
     info: 'M12 11v6M12 7.5v.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
     close: 'M6 6l12 12M18 6L6 18',
+    search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM16 16l4.5 4.5',
     signOut: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10',
   } as const;
   export type IconName = keyof typeof paths;

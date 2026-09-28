@@ -20,6 +20,8 @@ import {
   type ValidatedAuthMetadata,
 } from 'matrix-js-sdk';
 import { fetchFor } from '../auth/server';
+import { ThumbnailCache } from '../media/thumbnails';
+import { RoomListStore } from '../rooms/roomListStore.svelte.ts';
 import { deleteDatabase } from '../storage/idb';
 import { fromBase64 } from '../storage/secretBox';
 import type { Account, AccountSecrets } from '../storage/vault';
@@ -58,6 +60,10 @@ export class UserSession {
   ready = $state(false);
 
   readonly userId: string;
+  /** Список чатов — живёт, пока жива сессия. */
+  readonly rooms: RoomListStore;
+  /** Аватарки и миниатюры: с токеном, в памяти, с потолком. */
+  readonly thumbnails: ThumbnailCache;
   private readonly client: MatrixClient;
   private readonly account: Account;
   private readonly detach: Array<() => void> = [];
@@ -67,6 +73,22 @@ export class UserSession {
     this.client = client;
     this.account = account;
     this.userId = account.userId;
+    this.rooms = new RoomListStore(client);
+    this.thumbnails = new ThumbnailCache({
+      httpUrl: (mxc, size) => client.mxcUrlToHttp(mxc, size, size, 'crop', false, true, true),
+      accessToken: () => client.getAccessToken(),
+      fetch: fetchFor(account.method === 'demo'),
+    });
+  }
+
+  /** Как меня зовут и как я выгляжу — для своего лица в группе лиц. */
+  me(): { id: string; name: string; avatarUrl?: string } {
+    const user = this.client.getUser(this.userId);
+    return {
+      id: this.userId,
+      name: user?.displayName || this.userId,
+      ...(user?.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+    };
   }
 
   static async start(
@@ -174,6 +196,8 @@ export class UserSession {
     if (this.stopped) return;
     this.stopped = true;
     for (const off of this.detach.splice(0)) off();
+    this.rooms.destroy();
+    this.thumbnails.clear();
     this.client.stopClient();
   }
 

@@ -31,6 +31,8 @@ export const demoRooms = {
   quiet: `!quiet:${DEMO_SERVER}`,
   history: `!history:${DEMO_SERVER}`,
   invite: `!bookclub:${DEMO_SERVER}`,
+  archived: `!oldproject:${DEMO_SERVER}`,
+  family: `!family:${DEMO_SERVER}`,
 } as const;
 
 export interface DemoEvent {
@@ -49,6 +51,10 @@ export interface DemoRoom {
   /** Вся история по порядку; в синхронизацию уходит хвост, остальное — через /messages. */
   timeline: DemoEvent[];
   unread?: { notifications: number; highlights: number };
+  /** До какого события Алиса дочитала — `m.read`. Нет — не читала ничего. */
+  readUpTo?: string;
+  /** Теги комнаты: `m.favourite` — закреплённый, `m.lowpriority` — архив. */
+  tags?: Record<string, Record<string, unknown>>;
 }
 
 export interface DemoInvite {
@@ -191,9 +197,13 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
     rooms: [
       {
         roomId: anyaRoom,
-        state: roomState(anyaRoom, anya, [anya, alice]),
+        state: roomState(anyaRoom, anya, [anya, alice], [
+          { type: 'm.room.encryption', sender: anya, state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' }, event_id: `$enc-${anyaRoom}` },
+        ]),
         timeline: anyaTimeline,
         unread: { notifications: 2, highlights: 0 },
+        readUpTo: `$anya-4`,
+        tags: { 'm.favourite': { order: 0.5 } },
       },
       {
         roomId: weekend,
@@ -209,7 +219,8 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
           { type: 'm.room.name', sender: boris, state_key: '', content: { name: 'Дом 14, подъезд 2' }, event_id: `$name-${quiet}` },
         ]),
         timeline: quietTimeline,
-        unread: { notifications: 2, highlights: 0 },
+        // Беззвучный: сервер уведомлений не считает, но новые сообщения есть.
+        unread: { notifications: 0, highlights: 0 },
       },
       {
         roomId: history,
@@ -217,6 +228,39 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
           { type: 'm.room.name', sender: alice, state_key: '', content: { name: 'Длинная история' }, event_id: `$name-${history}` },
         ]),
         timeline: historyTimeline,
+        readUpTo: historyTimeline[historyTimeline.length - 1]!.event_id!,
+      },
+      {
+        roomId: demoRooms.archived,
+        state: roomState(demoRooms.archived, alice, [alice, boris], [
+          { type: 'm.room.name', sender: alice, state_key: '', content: { name: 'Старый проект' }, event_id: `$name-${demoRooms.archived}` },
+        ]),
+        timeline: stamp(demoRooms.archived, [text(boris, 'Закрываем, всем спасибо')], now, 60 * 24 * 40),
+        readUpTo: `$oldproject-0`,
+        tags: { 'm.lowpriority': { order: 0.5 } },
+      },
+      {
+        roomId: demoRooms.family,
+        state: [
+          {
+            type: 'm.room.create',
+            sender: alice,
+            state_key: '',
+            content: { creator: alice, room_version: '10', type: 'm.space' },
+            event_id: `$create-${demoRooms.family}`,
+          },
+          member(demoRooms.family, alice),
+          member(demoRooms.family, anya),
+          { type: 'm.room.name', sender: alice, state_key: '', content: { name: 'Семья' }, event_id: `$name-${demoRooms.family}` },
+          ...[anyaRoom, weekend].map((child) => ({
+            type: 'm.space.child',
+            sender: alice,
+            state_key: child,
+            content: { via: [DEMO_SERVER] },
+            event_id: `$child-${child}`,
+          })),
+        ],
+        timeline: [],
       },
     ],
     invites: [

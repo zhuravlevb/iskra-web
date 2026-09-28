@@ -6,7 +6,7 @@ test('адрес чата открывает чат; на телефоне — �
   await signInToDemo(page);
   await page.goto('/#/room/' + encodeURIComponent('!abc:example.org'));
   await expect(page.getByRole('heading', { name: '!abc:example.org' })).toBeVisible();
-  const list = page.getByRole('heading', { name: 'Чаты' });
+  const list = page.getByRole('heading', { name: 'Чаты', level: 1 });
   if (isPhone(info.project.name)) {
     await expect(list).toBeHidden();
     await page.getByRole('button', { name: 'Назад' }).click();

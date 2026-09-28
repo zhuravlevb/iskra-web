@@ -34,7 +34,7 @@ export async function signInToDemo(page: Page): Promise<void> {
   await page.getByRole('textbox', { name: 'Имя пользователя' }).fill('alice');
   await page.getByLabel('Пароль').fill('password');
   await page.getByRole('button', { name: 'Войти с паролем' }).click();
-  await expect(page.getByRole('heading', { name: 'Чаты' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
 }
 
 export const isPhone = (projectName: string) => projectName.endsWith('phone');

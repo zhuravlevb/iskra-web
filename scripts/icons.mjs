@@ -55,4 +55,9 @@ for (const [name, svg, size] of targets) {
   await sharp(Buffer.from(svg)).resize(size, size).png().toFile(new URL(name, out).pathname);
 }
 await writeFile(new URL('icon.svg', out), regular);
+
+// Фавиконка «есть непрочитанное»: та же иконка с точкой в углу. Точка — синяя, как акцент
+// по умолчанию, с белой обводкой: красная в заголовке вкладки читалась бы как ошибка.
+const dot = `<circle cx="820" cy="204" r="190" fill="#007AFF" stroke="#FFFFFF" stroke-width="56"/>`;
+await writeFile(new URL('icon-unread.svg', out), regular.replace('</svg>', `  ${dot}\n</svg>`));
 console.log('icons written to public/icons');

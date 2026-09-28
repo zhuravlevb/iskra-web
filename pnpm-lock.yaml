@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      blobatar:
+        specifier: 2.7.0
+        version: 2.7.0
       matrix-js-sdk:
         specifier: ^42.4.0
         version: 42.4.0
@@ -1349,6 +1352,17 @@ packages:
     resolution: {integrity: sha512-GLQdD3y6UF8iVuMJl5fHgE4jdn/ua7n+toKfLgNlg3BqQtOZjpy68T8Tup8/wGWZCDlm7KMg7tPb4MPn7oN0TQ==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  blobatar@2.7.0:
+    resolution: {integrity: sha512-tL1p2J3dXE/Z9U/ITwHqU7HBHmTH+Am+hif1J1hWAhvFT1VYC2HG+eXtN7081yuY+L2lrp9bs/VaF7dVH3S2jw==}
+    peerDependencies:
+      react: '>=18'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
 
   brace-expansion@2.1.7:
     resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
@@ -4055,6 +4069,8 @@ snapshots:
   base-x@5.0.1: {}
 
   baseline-browser-mapping@2.11.26: {}
+
+  blobatar@2.7.0: {}
 
   brace-expansion@2.1.7:
     dependencies:
