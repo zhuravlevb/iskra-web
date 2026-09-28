@@ -1,74 +1,57 @@
-<!--
-  Корень приложения. Этап 1 — скелет: раскладка в три ширины настоящая, колонки пока
-  пустые. Список чатов появится на этапе 3, лента — на этапе 4.
--->
+<!-- Корень: какой экран — решает фаза приложения (`core/session/app.svelte.ts`). -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Columns from '../../design/Columns.svelte';
-  import Bar from '../../design/Bar.svelte';
-  import EmptyState from '../../design/EmptyState.svelte';
-  import IconButton from '../../design/IconButton.svelte';
-  import Icon from '../../design/Icon.svelte';
-  import { viewport } from '../../design/viewport.svelte';
-  import { router } from '../../core/navigation/router.svelte';
-  import { i18n, t } from '../../i18n/index.svelte';
-  import { preferences } from './preferences.svelte';
+  import { app } from '../../core/session/app.svelte.ts';
+  import type { AuthCallback } from '../../core/auth/callback';
+  import { i18n, t } from '../../i18n/index.svelte.ts';
+  import SignIn from '../signin/SignIn.svelte';
+  import Elsewhere from './Elsewhere.svelte';
+  import Loading from './Loading.svelte';
+  import Shell from './Shell.svelte';
   import UpdatePrompt from './UpdatePrompt.svelte';
+  import { preferences } from './preferences.svelte.ts';
 
-  let panelOpen = $state(false);
-  const roomId = $derived(router.route.name === 'room' ? router.route.roomId : null);
+  let { authCallback }: { authCallback: AuthCallback | null } = $props();
 
-  onMount(() => preferences.persist());
+  /** Другая вкладка просит показаться. Фокус окно может не дать — тогда мигнуть заголовком. */
+  function answerPing() {
+    window.focus();
+    if (document.visibilityState === 'visible') return;
+    const original = document.title;
+    let flip = false;
+    const timer = setInterval(() => {
+      flip = !flip;
+      document.title = flip ? t('elsewhere.pinged') : original;
+    }, 1000);
+    const stop = () => {
+      if (document.visibilityState !== 'visible') return;
+      clearInterval(timer);
+      document.title = original;
+      document.removeEventListener('visibilitychange', stop);
+    };
+    document.addEventListener('visibilitychange', stop);
+  }
+
+  onMount(() => {
+    // Возврат со страницы входа читается один раз.
+    void app.boot(authCallback, { onFocusRequested: answerPing });
+    return preferences.persist();
+  });
 
   $effect(() => {
     document.documentElement.lang = i18n.locale;
     document.title = t('app.name');
   });
-
-  function closeRoom() {
-    panelOpen = false;
-    router.go({ name: 'home' });
-  }
 </script>
 
-<Columns
-  bind:listWidth={preferences.listWidth}
-  showMain={roomId !== null}
-  panelOpen={panelOpen && roomId !== null}
-  onClosePanel={() => (panelOpen = false)}
-  resizeLabel={t('layout.resizeList')}
->
-  {#snippet list()}
-    <Bar title={t('roomList.title')} />
-    <EmptyState title={t('roomList.emptyTitle')} message={t('roomList.emptyMessage')} />
-  {/snippet}
-
-  {#snippet main()}
-    {#if roomId}
-      <Bar title={roomId}>
-        {#snippet leading()}
-          {#if viewport.layout === 'stack'}
-            <IconButton label={t('room.back')} onclick={closeRoom}><Icon name="back" /></IconButton>
-          {/if}
-        {/snippet}
-        {#snippet trailing()}
-          <IconButton label={t('room.info')} pressed={panelOpen} onclick={() => (panelOpen = !panelOpen)}>
-            <Icon name="info" />
-          </IconButton>
-        {/snippet}
-      </Bar>
-    {:else}
-      <EmptyState title={t('room.noRoomSelectedTitle')} message={t('room.noRoomSelectedMessage')} />
-    {/if}
-  {/snippet}
-
-  {#snippet panel()}
-    <Bar title={t('room.info')}>
-      {#snippet trailing()}
-        <IconButton label={t('room.infoClose')} onclick={() => (panelOpen = false)}><Icon name="close" /></IconButton>
-      {/snippet}
-    </Bar>
-  {/snippet}
-</Columns>
+{#if app.phase.name === 'loading'}
+  <Loading />
+{:else if app.phase.name === 'signed-out'}
+  <SignIn problem={app.phase.problem} ended={app.phase.ended} />
+{:else if app.phase.name === 'elsewhere'}
+  <Elsewhere />
+{:else}
+  <Shell session={app.phase.session} />
+{/if}
 
 <UpdatePrompt />

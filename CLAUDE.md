@@ -36,7 +36,18 @@ pnpm icons          # перегенерировать public/icons из assets/
 | `src/i18n/` | `ru.json` (первым), `en.json` (вторым) | Ничего |
 
 Проверяет ESLint (`no-restricted-imports` в `eslint.config.js`). `core/` отдаёт наверх свои
-типы, никогда `MatrixEvent` или `Room`. Сторы — классы в `.svelte.ts` с `$state`.
+типы, никогда `MatrixEvent` или `Room`. Сторы — классы в `.svelte.ts` с `$state`, и
+импортируются они **с полным расширением** (`'./app.svelte.ts'`): иначе правило слоёв не
+отличит их от компонентов.
+
+## Сессия
+
+`src/boot.ts` — первый исполняемый модуль: забирает код авторизации из адреса и стирает
+его `replaceState`. `core/session/app.svelte.ts` — машина состояний (`loading`, `signed-out`,
+`elsewhere`, `signed-in`); `UserSession` — единственный владелец `MatrixClient`.
+Токены — только через `core/storage/vault.ts`, под неизвлекаемым ключом.
+
+Демо: адрес `demo.iskra.invalid`, `alice` / `password` (в `pnpm dev` хватает `demo`).
 
 ## Правила, которые легко нарушить
 

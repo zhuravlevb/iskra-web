@@ -64,6 +64,10 @@ export class DemoHomeserver {
   private readonly filters = new Map<string, unknown>();
   private readonly routes: Array<[string, RegExp, Handler]>;
   private batch = 0;
+  /** Ключи устройства, которые загрузило Rust-крипто: демо честно отдаёт их обратно. */
+  private deviceKeys: Record<string, unknown> | undefined;
+  private crossSigning: Record<string, unknown> = {};
+  private oneTimeKeys = 0;
 
   constructor(options: DemoServerOptions = {}) {
     this.variant = options.variant ?? 'full';
@@ -99,6 +103,17 @@ export class DemoHomeserver {
       // Звонков (MatrixRTC) в демо нет — и SDK это спрашивает на старте.
       ['GET', re(`${c}/unstable/org.matrix.msc4143/rtc/transports`), () => unrecognized()],
       ['GET', re(`${c}/v1/rtc/transports`), () => unrecognized()],
+      // Ключи. Демо не шифрует комнаты, но Rust-крипто поднимается и в нём — и спрашивает.
+      ['POST', re(`${c}/v3/keys/upload`), (r) => this.uploadKeys(r)],
+      ['POST', re(`${c}/v3/keys/query`), () => this.queryKeys()],
+      ['POST', re(`${c}/v3/keys/claim`), () => json(200, { one_time_keys: {}, failures: {} })],
+      ['POST', re(`${c}/v3/keys/device_signing/upload`), (r) => this.uploadCrossSigning(r)],
+      ['POST', re(`${c}/v3/keys/signatures/upload`), () => json(200, { failures: {} })],
+      ['PUT', re(`${c}/v3/sendToDevice/([^/]+)/([^/]+)`), () => json(200, {})],
+      // Бэкапа ключей нет. Это ответ «бэкапа нет», а не «не знаю»: перепутать их — значит
+      // создать новый бэкап поверх живого (см. план, «Восстановление переписки»).
+      ['GET', re(`${c}/v3/room_keys/version`), () => json(404, { errcode: 'M_NOT_FOUND', error: 'No current backup version' })],
+      ['GET', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), () => json(404, { errcode: 'M_NOT_FOUND', error: 'Account data not found' })],
     ];
   }
 
@@ -183,6 +198,32 @@ export class DemoHomeserver {
       device_id: DEVICE_ID,
       well_known: { 'm.homeserver': { base_url: DEMO_BASE_URL } },
     });
+  }
+
+  private uploadKeys({ body }: DemoRequest): Response {
+    const request = (body ?? {}) as { device_keys?: Record<string, unknown>; one_time_keys?: Record<string, unknown> };
+    if (request.device_keys) this.deviceKeys = request.device_keys;
+    this.oneTimeKeys += Object.keys(request.one_time_keys ?? {}).length;
+    return json(200, { one_time_key_counts: { signed_curve25519: this.oneTimeKeys } });
+  }
+
+  private queryKeys(): Response {
+    return json(200, {
+      device_keys: { [demoUsers.alice]: this.deviceKeys ? { [DEVICE_ID]: this.deviceKeys } : {} },
+      ...this.crossSigning,
+      failures: {},
+    });
+  }
+
+  private uploadCrossSigning({ body }: DemoRequest): Response {
+    const keys = (body ?? {}) as Record<string, unknown>;
+    const byUser = (key: string) => (keys[key] ? { [demoUsers.alice]: keys[key] } : {});
+    this.crossSigning = {
+      master_keys: byUser('master_key'),
+      self_signing_keys: byUser('self_signing_key'),
+      user_signing_keys: byUser('user_signing_key'),
+    };
+    return json(200, {});
   }
 
   private capabilities(): Response {

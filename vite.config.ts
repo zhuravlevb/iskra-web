@@ -63,6 +63,9 @@ export default defineConfig({
     target: 'es2022',
     // Никаких inline-стилей и скриптов: CSP без 'unsafe-inline'.
     assetsInlineLimit: 0,
+    // matrix-js-sdk — около мегабайта сам по себе. Предупреждение о 500 кБ здесь шум;
+    // размер первой загрузки меряется на телефоне (этап 0), а не этим порогом.
+    chunkSizeWarningLimit: 1500,
     sourcemap: true,
   },
   test: {

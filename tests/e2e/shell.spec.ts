@@ -1,30 +1,13 @@
-import { expect, test, type Page } from '@playwright/test';
-
-/** Собирает нарушения CSP и ошибки страницы: скелет должен жить под боевой политикой. */
-function watchForProblems(page: Page): string[] {
-  const problems: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') problems.push(message.text());
-  });
-  page.on('pageerror', (error) => problems.push(error.message));
-  return problems;
-}
-
-test('скелет открывается под строгой CSP без ошибок', async ({ page }) => {
-  const problems = watchForProblems(page);
-  const response = await page.goto('/');
-  expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
-  await expect(page.getByRole('heading', { name: 'Чаты' })).toBeVisible();
-  expect(problems).toEqual([]);
-});
+import { expect, test } from '@playwright/test';
+import { isPhone, signInToDemo, watchForProblems } from './helpers';
 
 test('адрес чата открывает чат; на телефоне — вместо списка, на десктопе — рядом', async ({ page }, info) => {
   const problems = watchForProblems(page);
-  const phone = info.project.name.endsWith('phone');
+  await signInToDemo(page);
   await page.goto('/#/room/' + encodeURIComponent('!abc:example.org'));
   await expect(page.getByRole('heading', { name: '!abc:example.org' })).toBeVisible();
   const list = page.getByRole('heading', { name: 'Чаты' });
-  if (phone) {
+  if (isPhone(info.project.name)) {
     await expect(list).toBeHidden();
     await page.getByRole('button', { name: 'Назад' }).click();
     await expect(list).toBeVisible();
@@ -36,7 +19,8 @@ test('адрес чата открывает чат; на телефоне — �
 });
 
 test('правая панель на широком экране сдвигает чат, а не перекрывает его', async ({ page }, info) => {
-  test.skip(info.project.name.endsWith('phone'), 'только десктоп');
+  test.skip(isPhone(info.project.name), 'только десктоп');
+  await signInToDemo(page);
   await page.goto('/#/room/' + encodeURIComponent('!abc:example.org'));
   const chat = page.locator('section.main');
   const before = (await chat.boundingBox())!.width;
@@ -48,8 +32,8 @@ test('правая панель на широком экране сдвигае�
 });
 
 test('ширину списка можно менять с клавиатуры, и она запоминается', async ({ page }, info) => {
-  test.skip(info.project.name.endsWith('phone'), 'только десктоп');
-  await page.goto('/');
+  test.skip(isPhone(info.project.name), 'только десктоп');
+  await signInToDemo(page);
   const separator = page.getByRole('separator', { name: 'Ширина списка чатов' });
   await separator.focus();
   await page.keyboard.press('End');

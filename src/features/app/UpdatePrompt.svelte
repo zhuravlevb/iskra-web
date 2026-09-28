@@ -7,8 +7,8 @@
   import { onMount } from 'svelte';
   import Banner from '../../design/Banner.svelte';
   import PrimaryButton from '../../design/PrimaryButton.svelte';
-  import { t } from '../../i18n/index.svelte';
-  import { appUpdate } from './serviceWorker.svelte';
+  import { t } from '../../i18n/index.svelte.ts';
+  import { appUpdate } from './serviceWorker.svelte.ts';
 
   onMount(() => appUpdate.register());
 </script>

@@ -13,6 +13,9 @@ import svelteConfig from './svelte.config.js';
  *
  * Сделано встроенным `no-restricted-imports` по каталогам: три правила, которые
  * читаются глазами, против плагина с собственным языком описания.
+ *
+ * Модули с рунами (`*.svelte.ts`) импортируются **с полным расширением**: иначе
+ * `./app.svelte` не отличить от компонента, и правило для core/ сработает на них.
  */
 const matrix = ['matrix-js-sdk', 'matrix-js-sdk/*', 'matrix-encrypt-attachment', '@matrix-org/*'];
 

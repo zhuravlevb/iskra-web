@@ -46,7 +46,7 @@
     background: var(--color-own-reaction);
   }
   .icon-button :global(svg) {
-    width: 1.375rem;
-    height: 1.375rem;
+    width: var(--size-icon-button);
+    height: var(--size-icon-button);
   }
 </style>

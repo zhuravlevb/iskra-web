@@ -53,6 +53,9 @@
   --size-sign-in-column: 26.25rem; /* 420 */
   --size-menu-width: 15rem; /* 240 */
   --size-recording-dot: 0.625rem; /* 10 — точка, а не сетка */
+  --size-icon: 1.25rem; /* 20 — значок рядом с текстом */
+  --size-icon-button: 1.5rem; /* 24 — значок в кнопке-иконке */
+  --size-sign-in-mark: 3.5rem; /* 56 — Theme.Size.signInMark */
 
   /* Колонки. Список чатов — Theme.Size.sidebarMinimum/Ideal/Maximum. */
   --column-list-min: 17.5rem; /* 280 */
@@ -110,6 +113,7 @@
   --color-incoming-bubble: rgb(0 0 0 / 0.08);
   --color-own-reaction: rgb(0 0 0 / 0.16);
   --color-danger: #ff3b30;
+  --color-on-danger: #ffffff;
   --color-focus: var(--accent);
 }
 

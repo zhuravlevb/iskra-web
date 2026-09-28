@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { viewport } from './viewport.svelte';
+  import { viewport } from './viewport.svelte.ts';
   import { LIST_IDEAL, LIST_MAX, LIST_MIN, clampListWidth as clamp } from './columns';
 
   interface Props {

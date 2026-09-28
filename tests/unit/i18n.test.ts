@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'svelte/compiler';
 import ru from '../../src/i18n/ru.json';
 import en from '../../src/i18n/en.json';
-import { preferredLocale, translate, translatePlural } from '../../src/i18n/index.svelte';
+import { preferredLocale, translate, translatePlural } from '../../src/i18n/index.svelte.ts';
 
 const isPlural = (value: unknown): value is Record<string, string> =>
   typeof value === 'object' && value !== null;
