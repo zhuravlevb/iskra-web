@@ -10,9 +10,15 @@ describe('адрес', () => {
   });
 
   it('всё незнакомое — домой, а не ошибка', () => {
-    for (const hash of ['', '#', '#/', '#/room/', '#/room/not-a-room', '#/room/%E0%A4%A', '#/settings', '#/room/!a:b/extra']) {
+    for (const hash of ['', '#', '#/', '#/room/', '#/room/not-a-room', '#/room/%E0%A4%A', '#/settings/nope', '#/room/!a:b/extra']) {
       expect(parseRoute(hash), hash).toEqual({ name: 'home' });
     }
+  });
+
+  it('настройки — с разделом и без', () => {
+    expect(parseRoute('#/settings')).toEqual({ name: 'settings' });
+    expect(parseRoute('#/settings/storage')).toEqual({ name: 'settings', section: 'storage' });
+    expect(formatRoute({ name: 'settings', section: 'devices' })).toBe('#/settings/devices');
   });
 
   it('ID комнаты — и ничего больше', () => {

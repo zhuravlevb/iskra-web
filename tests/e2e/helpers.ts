@@ -136,3 +136,13 @@ export async function saveRecoveryCode(page: Page): Promise<string> {
 }
 
 export const isPhone = (projectName: string) => projectName.endsWith('phone');
+
+/** Выйти: «Выйти» живёт в настройках, внизу, — и спрашивает, правда ли. */
+export async function signOut(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('button', { name: 'Выйти' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Выйти из Iskra?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Выйти' }).click();
+  await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
+}

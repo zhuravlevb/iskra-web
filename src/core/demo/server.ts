@@ -174,6 +174,8 @@ export class DemoHomeserver {
       ['DELETE', re(`${c}/v3/room_keys/version/([^/]+)`), (r) => this.deleteBackup(r.params[0]!)],
       ['PUT', re(`${c}/v3/room_keys/keys`), (r) => this.putBackupKeys(r)],
       ['GET', re(`${c}/v3/room_keys/keys`), (r) => this.getBackupKeys(r)],
+      // Ключи одной комнаты — их просит Rust-крипто, приглашая: чтобы передать приглашённому историю.
+      ['GET', re(`${c}/v3/room_keys/keys/([^/]+)`), (r) => this.getRoomBackupKeys(r)],
       ['GET', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), (r) => this.getAccountData(r.params[1]!)],
       ['PUT', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), (r) => this.putAccountData(r.params[1]!, r.body)],
     ];
@@ -416,6 +418,12 @@ export class DemoHomeserver {
     this.save();
     const info = this.backupInfo(backup);
     return json(200, { count: info.count, etag: info.etag });
+  }
+
+  private getRoomBackupKeys({ url, params }: DemoRequest): Response {
+    const backup = this.account.backups.find((b) => b.version === url.searchParams.get('version'));
+    if (!backup) return json(404, { errcode: 'M_NOT_FOUND', error: 'No such backup' });
+    return json(200, backup.rooms[params[0] ?? ''] ?? { sessions: {} });
   }
 
   private getBackupKeys({ url }: DemoRequest): Response {

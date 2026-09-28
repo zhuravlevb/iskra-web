@@ -5,7 +5,10 @@
  *
  * Hash, а не путь, — чтобы статическому хостингу не нужны были правила перезаписи.
  */
-export type Route = { name: 'home' } | { name: 'room'; roomId: string };
+export const settingsSections = ['profile', 'security', 'devices', 'appearance', 'storage', 'about'] as const;
+export type SettingsSection = (typeof settingsSections)[number];
+
+export type Route = { name: 'home' } | { name: 'room'; roomId: string } | { name: 'settings'; section?: SettingsSection };
 
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#/, '');
@@ -18,6 +21,12 @@ export function parseRoute(hash: string): Route {
       // Битая percent-кодировка — это просто неизвестный адрес.
     }
   }
+  const settings = /^\/settings(?:\/([a-z]+))?$/.exec(path);
+  if (settings) {
+    const section = settingsSections.find((name) => name === settings[1]);
+    if (!settings[1]) return { name: 'settings' };
+    if (section) return { name: 'settings', section };
+  }
   return { name: 'home' };
 }
 
@@ -27,6 +36,8 @@ export function formatRoute(route: Route): string {
       return '#/';
     case 'room':
       return `#/room/${encodeURIComponent(route.roomId)}`;
+    case 'settings':
+      return route.section ? `#/settings/${route.section}` : '#/settings';
   }
 }
 

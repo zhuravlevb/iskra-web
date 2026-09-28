@@ -25,6 +25,8 @@
   import { roomName } from '../rooms/text';
   import RoomView from '../room/RoomView.svelte';
   import HotkeyHelp from './HotkeyHelp.svelte';
+  import NewChatDialog from '../rooms/NewChatDialog.svelte';
+  import Settings from '../settings/Settings.svelte';
   import RoomPanel from '../room/RoomPanel.svelte';
   import LockedHistoryStrip from '../recovery/LockedHistoryStrip.svelte';
 
@@ -32,6 +34,7 @@
   let confirmingSignOut = $state(false);
   let switching = $state(false);
   let helping = $state(false);
+  let creating = $state(false);
   let roomView: RoomView | undefined = $state();
 
   let panelOpen = $state(false);
@@ -86,6 +89,9 @@
       case 'help':
         helping = true;
         break;
+      case 'settings':
+        router.go({ name: 'settings' });
+        break;
       case 'escape':
         // Открытое окно или меню закрывается само (`<dialog>`); это — когда закрывать нечего.
         if (document.querySelector('dialog[open]')) return;
@@ -116,7 +122,7 @@
 
 <Columns
   bind:listWidth={preferences.listWidth}
-  showMain={roomId !== null}
+  showMain={roomId !== null || router.route.name === 'settings'}
   panelOpen={panelOpen && roomId !== null}
   onClosePanel={() => (panelOpen = false)}
   resizeLabel={t('layout.resizeList')}
@@ -128,8 +134,11 @@
           <IconButton label={t('quickSwitch.label')} shortcut={describeHotkey('quickSwitch')} onclick={() => (switching = true)}>
             <Icon name="search" />
           </IconButton>
-          <IconButton label={t('account.signOut')} onclick={() => (confirmingSignOut = true)}>
-            <Icon name="signOut" />
+          <IconButton label={t('roomList.newConversation')} onclick={() => (creating = true)}>
+            <Icon name="compose" />
+          </IconButton>
+          <IconButton label={t('account.settings')} shortcut={describeHotkey('settings')} onclick={() => router.go({ name: 'settings' })}>
+            <Icon name="settings" />
           </IconButton>
         {/snippet}
       </Bar>
@@ -158,6 +167,17 @@
       {#key roomId}
         <RoomView bind:this={roomView} {session} {roomId} />
       {/key}
+      </div>
+    {:else if router.route.name === 'settings'}
+      <div class="main-column">
+        <Bar title={t('settings.title')}>
+          {#snippet leading()}
+            {#if viewport.layout === 'stack'}
+              <IconButton label={t('settings.back')} onclick={() => router.go({ name: 'home' })}><Icon name="back" /></IconButton>
+            {/if}
+          {/snippet}
+        </Bar>
+        <Settings {session} section={router.route.section} />
       </div>
     {:else}
       <EmptyState title={t('room.noRoomSelectedTitle')} message={t('room.noRoomSelectedMessage')} />
@@ -192,6 +212,7 @@
 
 <QuickSwitcher {session} open={switching} onclose={() => (switching = false)} />
 <HotkeyHelp open={helping} onclose={() => (helping = false)} />
+<NewChatDialog open={creating} {session} onclose={() => (creating = false)} />
 
 <ConfirmDialog
   open={confirmingSignOut}

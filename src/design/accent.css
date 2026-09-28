@@ -5,18 +5,20 @@
  * это белая плашка с белой надписью в тёмной теме — урок нативной Искры.
  *
  * Цвета — системные цвета Apple (их берёт SwiftUI), светлый и тёмный вариант.
- * Выбирается атрибутом `data-accent` на <html>; по умолчанию — синий, как в Искре.
+ * Выбирается атрибутом `data-accent` на <html>; по умолчанию — синий, как в Искре. На любом
+ * другом элементе `data-accent` задаёт только пару `--accent-light/-dark` — так образец цвета в
+ * настройках показывает свой цвет, а не выбранный.
  */
 
 :root,
-:root[data-accent='blue'] { --accent-light: #007aff; --accent-dark: #0a84ff; --on-accent: #ffffff; }
-:root[data-accent='red'] { --accent-light: #ff3b30; --accent-dark: #ff453a; --on-accent: #ffffff; }
-:root[data-accent='orange'] { --accent-light: #ff9500; --accent-dark: #ff9f0a; --on-accent: #ffffff; }
+[data-accent='blue'] { --accent-light: #007aff; --accent-dark: #0a84ff; --on-accent: #ffffff; }
+[data-accent='red'] { --accent-light: #ff3b30; --accent-dark: #ff453a; --on-accent: #ffffff; }
+[data-accent='orange'] { --accent-light: #ff9500; --accent-dark: #ff9f0a; --on-accent: #ffffff; }
 /* Жёлтый — единственный цветной акцент с чёрной надписью. */
-:root[data-accent='yellow'] { --accent-light: #ffcc00; --accent-dark: #ffd60a; --on-accent: #000000; }
-:root[data-accent='green'] { --accent-light: #34c759; --accent-dark: #30d158; --on-accent: #ffffff; }
-:root[data-accent='cyan'] { --accent-light: #32ade6; --accent-dark: #64d2ff; --on-accent: #ffffff; }
-:root[data-accent='violet'] { --accent-light: #af52de; --accent-dark: #bf5af2; --on-accent: #ffffff; }
+[data-accent='yellow'] { --accent-light: #ffcc00; --accent-dark: #ffd60a; --on-accent: #000000; }
+[data-accent='green'] { --accent-light: #34c759; --accent-dark: #30d158; --on-accent: #ffffff; }
+[data-accent='cyan'] { --accent-light: #32ade6; --accent-dark: #64d2ff; --on-accent: #ffffff; }
+[data-accent='violet'] { --accent-light: #af52de; --accent-dark: #bf5af2; --on-accent: #ffffff; }
 
 :root { --accent: var(--accent-light); }
 :root[data-theme='dark'] { --accent: var(--accent-dark); }
@@ -29,6 +31,9 @@
   --bubble-own: var(--accent);
   --on-bubble-own: var(--on-accent);
 }
+
+/* Образец монохромного — цвет текста. */
+[data-accent='mono'] { --accent-light: var(--color-text); --accent-dark: var(--color-text); }
 
 /* Монохромный: акцент — цвет текста, надпись — цвет фона. */
 :root[data-accent='mono'] {

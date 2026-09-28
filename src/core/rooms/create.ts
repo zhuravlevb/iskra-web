@@ -9,7 +9,28 @@
  * Открытую комнату читает каждый, кто вошёл, поэтому шифрования в ней нет — и об этом
  * говорит экран (`roomList.new.openMeansUnencrypted` нативной Искры). В закрытой — есть.
  */
-import { EventType, Preset, Visibility, type MatrixClient } from 'matrix-js-sdk';
+import { ClientEvent, EventType, Preset, Visibility, type MatrixClient, type Room } from 'matrix-js-sdk';
+
+const ROOM_ARRIVES_MS = 15_000;
+
+/**
+ * Комната, которую сервер только что создал, приходит к клиенту следующей синхронизацией.
+ * Открыть её раньше — показать сырой ID и «Не удалось открыть чат». Ждём, но не вечно:
+ * не пришла — всё равно открываем, лента подождёт сама.
+ */
+function arrived(client: MatrixClient, roomId: string): Promise<void> {
+  if (client.getRoom(roomId)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      client.off(ClientEvent.Room, onRoom);
+      resolve();
+    };
+    const onRoom = (room: Room) => room.roomId === roomId && done();
+    const timer = setTimeout(done, ROOM_ARRIVES_MS);
+    client.on(ClientEvent.Room, onRoom);
+  });
+}
 
 const ENCRYPTION = { type: EventType.RoomEncryption, state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } };
 
@@ -32,6 +53,7 @@ export async function createDirect(client: MatrixClient, userId: string): Promis
     initial_state: [ENCRYPTION],
   });
   await client.setAccountData(EventType.Direct, { ...direct, [id]: [...(direct[id] ?? []), roomId] } as never);
+  await arrived(client, roomId);
   return roomId;
 }
 
@@ -42,5 +64,6 @@ export async function createGroup(client: MatrixClient, name: string, open: bool
     visibility: Visibility.Private,
     initial_state: open ? [] : [ENCRYPTION],
   });
+  await arrived(client, roomId);
   return roomId;
 }

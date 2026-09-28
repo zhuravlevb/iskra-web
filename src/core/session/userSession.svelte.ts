@@ -65,6 +65,8 @@ export function databaseNames(userId: string) {
 
 export class UserSession {
   connection = $state<Connection>('connecting');
+  /** Как меня зовут и как я выгляжу — живое: меняется, когда поменяли в настройках или где-то ещё. */
+  profile = $state<{ id: string; name: string; avatarUrl?: string }>({ id: '', name: '' });
   /** Первая синхронизация прошла — список комнат уже есть, хотя бы из кэша. */
   ready = $state(false);
 
@@ -135,6 +137,21 @@ export class UserSession {
     return this.client.getRoom(roomId)?.getMyMembership() === 'join';
   }
 
+  /** Профиль — с сервера: он источник, а не то, что SDK собрал из событий комнат. */
+  async readProfile(): Promise<void> {
+    this.profile = this.me();
+    try {
+      const info = await this.client.getProfileInfo(this.userId);
+      this.profile = {
+        id: this.userId,
+        name: info.displayname || this.userId,
+        ...(info.avatar_url ? { avatarUrl: info.avatar_url } : {}),
+      };
+    } catch {
+      // Нет сети — останется то, что знает SDK.
+    }
+  }
+
   /** Как меня зовут и как я выгляжу — для своего лица в группе лиц. */
   me(): { id: string; name: string; avatarUrl?: string } {
     const user = this.client.getUser(this.userId);
@@ -173,12 +190,14 @@ export class UserSession {
 
   async setName(name: string): Promise<void> {
     await this.client.setDisplayName(name.trim());
+    await this.readProfile();
   }
 
   /** Фото профиля; `null` — убрать. */
   async setPhoto(photo: { blob: Blob; name: string; type: string } | null): Promise<void> {
     const mxc = photo ? await this.uploadPublic(photo.blob, photo.name, photo.type) : '';
     await this.client.setAvatarUrl(mxc);
+    await this.readProfile();
   }
 
   /** Мои устройства — список с сервера; это отмечено. */
@@ -202,6 +221,19 @@ export class UserSession {
   accountPage(): string | undefined {
     const uri = this.account.oauth?.metadata['account_management_uri'];
     return typeof uri === 'string' && /^https:\/\//.test(uri) ? uri : undefined;
+  }
+
+  /**
+   * «Очистить кэш»: кэш синхронизации — вон, ключи шифрования и вход — остаются. После
+   * этого страницу перезагружают: клиент начнёт с первой синхронизации.
+   */
+  async clearCache(): Promise<void> {
+    this.stop();
+    try {
+      await this.client.store.deleteAllData();
+    } catch {
+      await deleteDatabase(`matrix-js-sdk:${databaseNames(this.userId).sync}`).catch(() => {});
+    }
   }
 
   /** Способ входа — для экрана «О приложении» и «Хранилища»: демо не хранится между входами. */
@@ -282,6 +314,7 @@ export class UserSession {
     const onSync = (state: SyncState) => {
       if (state === SyncState.Prepared || state === SyncState.Syncing || state === SyncState.Catchup) {
         this.connection = 'online';
+        if (!this.ready) void this.readProfile();
         this.ready = true;
       } else if (state === SyncState.Error || state === SyncState.Reconnecting) {
         this.connection = 'offline';

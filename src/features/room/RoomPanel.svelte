@@ -88,6 +88,16 @@
     memberMenu = { member, at: { x: rect.left + 16, y: rect.bottom } };
   }
 
+  /**
+   * Пункт меню участника: взять участника *до* того, как меню закрыто. `{@const}` внутри
+   * меню читает `memberMenu`, и после закрытия читать его уже нечего.
+   */
+  function onMember(action: (member: MemberSummary) => void) {
+    const member = memberMenu?.member;
+    memberMenu = null;
+    if (member) action(member);
+  }
+
   async function write(member: MemberSummary) {
     try {
       const target = await session.createDirect(member.id);
@@ -200,19 +210,18 @@
     onclose={() => (memberMenu = null)}
   >
     {#if memberMenu}
-      {@const member = memberMenu.member}
-      {@const can = actionsFor(member)}
+      {@const can = actionsFor(memberMenu.member)}
       {#if can.write}
-        <button type="button" role="menuitem" onclick={() => ((memberMenu = null), void write(member))}>{t('room.manage.write')}</button>
+        <button type="button" role="menuitem" onclick={() => onMember(write)}>{t('room.manage.write')}</button>
       {/if}
       {#if can.role}
-        <button type="button" role="menuitem" onclick={() => ((memberMenu = null), (roleFor = member))}>{t('room.manage.role')}</button>
+        <button type="button" role="menuitem" onclick={() => onMember((m) => (roleFor = m))}>{t('room.manage.role')}</button>
       {/if}
       {#if can.remove}
-        <button type="button" role="menuitem" class="danger" onclick={() => ((memberMenu = null), void details?.remove(member))}>{t('room.manage.remove')}</button>
+        <button type="button" role="menuitem" class="danger" onclick={() => onMember((m) => void details?.remove(m))}>{t('room.manage.remove')}</button>
       {/if}
       {#if can.ban}
-        <button type="button" role="menuitem" class="danger" onclick={() => ((memberMenu = null), (blocking = member))}>{t('room.manage.block')}</button>
+        <button type="button" role="menuitem" class="danger" onclick={() => onMember((m) => (blocking = m))}>{t('room.manage.block')}</button>
       {/if}
     {/if}
   </Menu>

@@ -147,6 +147,9 @@ export class RoomListStore {
   }
 
   get(roomId: string): RoomSummary | undefined {
+    // Читаем `rooms` — ради реактивности: `byId` — обычный `Map`, и без этого экран, открывший
+    // комнату раньше, чем она пришла (только что созданную), не узнал бы, что она появилась.
+    void this.rooms;
     return this.byId.get(roomId);
   }
 

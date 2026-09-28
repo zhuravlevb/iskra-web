@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { enterDemoCredentials, signInToDemo, watchForProblems } from './helpers';
+import { enterDemoCredentials, signInToDemo, signOut, watchForProblems } from './helpers';
 
 /**
  * Весь путь восстановления на демо-сервере: аккаунт Алисы переживает выход (он лежит в
@@ -12,8 +12,7 @@ test('новый аккаунт → код → выход → вход новы�
   // Всё открыто — плашки нет.
   await expect(page.getByRole('button', { name: 'Старая переписка заблокирована' })).toBeHidden();
 
-  await page.getByRole('button', { name: 'Выйти' }).click();
-  await page.getByRole('dialog', { name: 'Выйти из Iskra?' }).getByRole('button', { name: 'Выйти' }).click();
+  await signOut(page);
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
 
   await enterDemoCredentials(page);
@@ -40,8 +39,7 @@ test('новый аккаунт → код → выход → вход новы�
 
 test('ни кода, ни другого устройства: пароль — и новый код взамен', async ({ page }) => {
   await signInToDemo(page);
-  await page.getByRole('button', { name: 'Выйти' }).click();
-  await page.getByRole('dialog', { name: 'Выйти из Iskra?' }).getByRole('button', { name: 'Выйти' }).click();
+  await signOut(page);
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
 
   await enterDemoCredentials(page);

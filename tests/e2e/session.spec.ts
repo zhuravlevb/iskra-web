@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_ADDRESS, signInToDemo, submitAddress, watchForProblems } from './helpers';
+import { DEMO_ADDRESS, signInToDemo, signOut, submitAddress, watchForProblems } from './helpers';
 
 test('экран входа под строгой CSP, без ошибок', async ({ page }) => {
   const problems = watchForProblems(page);
@@ -38,11 +38,7 @@ test('вход в демо с Rust-крипто под CSP, сессия пер�
   expect(mine(await databases()).some((n) => n.includes('matrix-sdk-crypto'))).toBe(true);
   expect(mine(await databases()).some((n) => n.includes('iskra-sync'))).toBe(true);
 
-  await page.getByRole('button', { name: 'Выйти' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Выйти из Iskra?' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Выйти' }).click();
-  await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
+  await signOut(page);
 
   await expect.poll(async () => mine(await databases())).toEqual([]);
   await page.reload({ waitUntil: 'domcontentloaded' });

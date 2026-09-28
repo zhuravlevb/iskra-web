@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { execSync } from 'node:child_process';
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -15,7 +16,19 @@ function staticHeaders(): Plugin {
   };
 }
 
+/** Какая это сборка — коротким хэшем коммита: «Скопировать данные о сборке» в «Об Iskra». */
+function buildId(): string {
+  const fromCi = process.env['GITHUB_SHA'];
+  if (fromCi) return fromCi.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'dev';
+  }
+}
+
 export default defineConfig({
+  define: { __ISKRA_BUILD__: JSON.stringify(buildId()) },
   plugins: [
     svelte(),
     VitePWA({
