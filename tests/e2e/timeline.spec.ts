@@ -74,15 +74,17 @@ test('история: окно наполняется, прокрутка вве
   const count = () => page.locator('.item').count();
   const before = await count();
   await scroller.evaluate((el) => (el.scrollTop = 500));
-  const marker = page.locator('.item').nth(5);
-  const markerText = await marker.innerText();
+  // Метка — сообщение, а не разделитель дня: разделитель и не должен держать место
+  // (подгруженное того же дня встаёт под него), а где он окажется, зависит от времени суток.
+  const marker = page.locator('.item[data-anchor]').nth(5);
+  const markerKey = (await marker.getAttribute('data-anchor'))!;
   const y1 = (await marker.boundingBox())!.y;
   await scroller.evaluate((el) => (el.scrollTop = 0));
   await scroller.evaluate((el) => el.dispatchEvent(new Event('scroll')));
   await expect.poll(count).toBeGreaterThan(before);
   // Помеченное сообщение не уехало: подгрузка сверху не сдвинула то, что на экране
   // (сдвиг — ровно на 500 пикселей нашей же прокрутки к верху).
-  const again = page.locator('.item').filter({ hasText: markerText }).first();
+  const again = page.locator(`.item[data-anchor="${markerKey}"]`);
   const y2 = (await again.boundingBox())!.y;
   expect(Math.abs(y2 - (y1 + 500))).toBeLessThan(4);
 });

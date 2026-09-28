@@ -24,15 +24,36 @@ export function watchForProblems(page: Page): string[] {
   return problems;
 }
 
+/** Вся консоль страницы — для диагностики падений в CI, где экрана не видно. */
+const consoles = new WeakMap<Page, string[]>();
+function recordConsole(page: Page): string[] {
+  let lines = consoles.get(page);
+  if (!lines) {
+    const record: string[] = [];
+    lines = record;
+    consoles.set(page, record);
+    page.on('console', (m) => record.push(`[${m.type()}] ${m.text()}`));
+    page.on('pageerror', (e) => record.push(`[pageerror] ${e.message}`));
+  }
+  return lines;
+}
+
 /** Вход в демо: alice / password. */
 export async function signInToDemo(page: Page): Promise<void> {
+  const log = recordConsole(page);
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
   await page.getByRole('button', { name: 'Продолжить' }).click();
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
   const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });
   const problem = page.getByRole('alert');
-  await expect(passwordDoor.or(problem)).toBeVisible({ timeout: 15_000 });
+  try {
+    await expect(passwordDoor.or(problem)).toBeVisible({ timeout: 15_000 });
+  } catch (error) {
+    // Логи CI не показывают экран — пусть покажет ошибка.
+    const snapshot = await page.locator('body').ariaSnapshot().catch(() => '(нет снимка)');
+    throw new Error(`Вход в демо завис после «Продолжить».\nЭкран:\n${snapshot}\nКонсоль:\n${log.slice(-30).join('\n')}`, { cause: error });
+  }
   // Если сервер не нашёлся — сказать, что написано на экране, а не упасть по таймауту.
   if (await problem.isVisible()) throw new Error(`Вход в демо: ${await problem.innerText()}`);
   await passwordDoor.click();
