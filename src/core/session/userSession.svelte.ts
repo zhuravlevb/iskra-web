@@ -143,6 +143,55 @@ export class UserSession {
     };
   }
 
+  // ————— Профиль, устройства, аккаунт —————
+
+  /**
+   * Загрузить картинку открыто — для фото профиля и комнаты. Они публичны по устройству
+   * Matrix (лежат в состоянии, которое не шифруется), поэтому и шифровать их незачем.
+   */
+  async uploadPublic(blob: Blob, name: string, type: string): Promise<string> {
+    const uploader = uploadClientFor(this.client, this.account.method === 'demo' ? fetchFor(true) : undefined);
+    return uploader.upload(blob, { name, type });
+  }
+
+  async setName(name: string): Promise<void> {
+    await this.client.setDisplayName(name.trim());
+  }
+
+  /** Фото профиля; `null` — убрать. */
+  async setPhoto(photo: { blob: Blob; name: string; type: string } | null): Promise<void> {
+    const mxc = photo ? await this.uploadPublic(photo.blob, photo.name, photo.type) : '';
+    await this.client.setAvatarUrl(mxc);
+  }
+
+  /** Мои устройства — список с сервера; это отмечено. */
+  async devices(): Promise<Array<{ id: string; name: string; lastSeen?: number; current: boolean }>> {
+    const { devices } = await this.client.getDevices();
+    const mine = this.client.getDeviceId();
+    return devices
+      .map((d) => ({
+        id: d.device_id,
+        name: d.display_name || d.device_id,
+        ...(d.last_seen_ts ? { lastSeen: d.last_seen_ts } : {}),
+        current: d.device_id === mine,
+      }))
+      .sort((a, b) => +b.current - +a.current || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+  }
+
+  /**
+   * Страница аккаунта у сервера (`account_management_uri` MAS) — там живут устройства и
+   * выход из них: на серверах с MAS удалить устройство через клиентский API нельзя.
+   */
+  accountPage(): string | undefined {
+    const uri = this.account.oauth?.metadata['account_management_uri'];
+    return typeof uri === 'string' && /^https:\/\//.test(uri) ? uri : undefined;
+  }
+
+  /** Способ входа — для экрана «О приложении» и «Хранилища»: демо не хранится между входами. */
+  get method(): Account['method'] {
+    return this.account.method;
+  }
+
   static async start(
     account: Account,
     secrets: AccountSecrets,

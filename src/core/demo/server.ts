@@ -15,6 +15,7 @@
 import { emptyAccount, mergeSignatures, type DemoAccountState, type DemoStorage } from './account';
 import { demoMediaLibrary, demoMxc, type DemoMedia } from './media';
 import {
+  DEMO_SERVER,
   buildDemoWorld,
   demoCredentials,
   demoDirect,
@@ -89,6 +90,10 @@ export class DemoHomeserver {
   private readonly sent = new Map<string, string>();
   private sentCount = 0;
   private readonly failedOnce = new Set<string>();
+  /** Push-правила Алисы — меняются из настроек уведомлений комнаты. */
+  private readonly rules = this.pushRules();
+  private readonly profiles: Record<string, { displayname: string; avatar_url?: string }> = structuredClone(demoProfiles);
+  private nextRoom = 0;
   /** mediaId → байты: нарисованные фикстуры и то, что загрузили. */
   private readonly media: Map<string, DemoMedia> = demoMediaLibrary();
   private nextMedia = 0;
@@ -117,7 +122,15 @@ export class DemoHomeserver {
       ['POST', re(`${c}/v3/logout`), () => json(200, {})],
       ['GET', re(`${c}/v3/account/whoami`), (r) => json(200, { user_id: demoUsers.alice, device_id: r.deviceId })],
       ['GET', re(`${c}/v3/capabilities`), () => this.capabilities()],
-      ['GET', re(`${c}/v3/pushrules/?`), () => json(200, this.pushRules())],
+      ['GET', re(`${c}/v3/pushrules/?`), () => json(200, this.rules)],
+      ['PUT', re(`${c}/v3/pushrules/global/(override|room|sender|content|underride)/([^/]+)`), (r) => this.putPushRule(r)],
+      ['DELETE', re(`${c}/v3/pushrules/global/(override|room|sender|content|underride)/([^/]+)`), (r) => this.deletePushRule(r)],
+      ['POST', re(`${c}/v3/createRoom`), (r) => this.createRoom(r)],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/invite`), (r) => this.membership(r, 'invite')],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/kick`), (r) => this.membership(r, 'leave')],
+      ['POST', re(`${c}/v3/rooms/([^/]+)/ban`), (r) => this.membership(r, 'ban')],
+      ['PUT', re(`${c}/v3/profile/([^/]+)/(displayname|avatar_url)`), (r) => this.putProfile(r)],
+      ['GET', re(`${c}/v3/devices`), () => this.devices()],
       ['POST', re(`${c}/v3/user/([^/]+)/filter`), (r) => this.createFilter(r)],
       ['GET', re(`${c}/v3/user/([^/]+)/filter/([^/]+)`), (r) => this.getFilter(r)],
       ['GET', re(`${c}/v3/sync`), (r) => this.sync(r)],
@@ -740,6 +753,144 @@ export class DemoHomeserver {
     });
   }
 
+  // ————— Push-правила —————
+
+  private putPushRule({ params, body }: DemoRequest): Response {
+    const [kind, ruleId] = params as [string, string];
+    const rule = { rule_id: ruleId, default: false, enabled: true, ...((body ?? {}) as Record<string, unknown>) };
+    const list = (this.rules.global as Record<string, Array<{ rule_id: string }>>)[kind]!;
+    const at = list.findIndex((r) => r.rule_id === ruleId);
+    // Новое правило — первым: оно главнее прежних (как `before` без указания у сервера).
+    if (at >= 0) list[at] = rule;
+    else list.unshift(rule);
+    this.rulesChanged();
+    return json(200, {});
+  }
+
+  private deletePushRule({ params }: DemoRequest): Response {
+    const [kind, ruleId] = params as [string, string];
+    const global = this.rules.global as Record<string, Array<{ rule_id: string }>>;
+    const before = global[kind]!.length;
+    global[kind] = global[kind]!.filter((r) => r.rule_id !== ruleId);
+    if (global[kind]!.length === before) return json(404, { errcode: 'M_NOT_FOUND', error: 'Push rule not found' });
+    this.rulesChanged();
+    return json(200, {});
+  }
+
+  private rulesChanged(): void {
+    this.pendingAccountData.push({ type: 'm.push_rules', content: structuredClone(this.rules) });
+    this.wake?.();
+  }
+
+  // ————— Комнаты: создание и участники —————
+
+  private createRoom({ body }: DemoRequest): Response {
+    const request = (body ?? {}) as {
+      name?: string;
+      preset?: string;
+      is_direct?: boolean;
+      invite?: string[];
+      initial_state?: DemoEvent[];
+    };
+    const roomId = `!new-${++this.nextRoom}:${DEMO_SERVER}`;
+    const invited = request.invite ?? [];
+    const alice = demoUsers.alice;
+    const at = Date.now();
+    const stamp = (e: DemoEvent, i: number): DemoEvent => ({ ...e, event_id: `$${roomId.slice(1, roomId.indexOf(':'))}-${i}`, origin_server_ts: at + i });
+    const trusted = request.preset === 'trusted_private_chat';
+    const state: DemoEvent[] = [
+      { type: 'm.room.create', sender: alice, state_key: '', content: { room_version: '10', creator: alice } },
+      { type: 'm.room.member', sender: alice, state_key: alice, content: { membership: 'join', displayname: this.profiles[alice]?.displayname } },
+      {
+        type: 'm.room.power_levels',
+        sender: alice,
+        state_key: '',
+        content: {
+          users: Object.fromEntries([alice, ...(trusted ? invited : [])].map((u) => [u, 100])),
+          users_default: 0,
+          events_default: 0,
+          state_default: 50,
+          invite: 0,
+          kick: 50,
+          ban: 50,
+          redact: 50,
+        },
+      },
+      { type: 'm.room.join_rules', sender: alice, state_key: '', content: { join_rule: request.preset === 'public_chat' ? 'public' : 'invite' } },
+      { type: 'm.room.history_visibility', sender: alice, state_key: '', content: { history_visibility: 'shared' } },
+      ...(request.name ? [{ type: 'm.room.name', sender: alice, state_key: '', content: { name: request.name } }] : []),
+      ...(request.initial_state ?? []).map((e) => ({ ...e, sender: alice, state_key: e.state_key ?? '' })),
+      ...invited.map((u) => ({
+        type: 'm.room.member',
+        sender: alice,
+        state_key: u,
+        content: { membership: 'invite', displayname: this.profiles[u]?.displayname, ...(request.is_direct ? { is_direct: true } : {}) },
+      })),
+    ].map(stamp);
+    this.rooms.set(roomId, { roomId, state, timeline: state });
+    this.enqueue({
+      kind: 'join',
+      roomId,
+      body: {
+        state: { events: [] },
+        timeline: { events: state.map((e) => withDefaults(e)), limited: false, prev_batch: 't0' },
+        summary: { 'm.joined_member_count': 1, 'm.invited_member_count': invited.length },
+      },
+    });
+    return json(200, { room_id: roomId });
+  }
+
+  /** Пригласить, исключить, заблокировать — событие участия от имени Алисы. */
+  private membership({ params, body }: DemoRequest, membership: 'invite' | 'leave' | 'ban'): Response {
+    const room = this.rooms.get(params[0] ?? '');
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const { user_id: userId, reason } = (body ?? {}) as { user_id?: string; reason?: string };
+    if (!userId || !/^@[^:]+:.+$/.test(userId)) return json(400, { errcode: 'M_INVALID_PARAM', error: 'Bad user id' });
+    if (membership === 'invite' && userId.endsWith(`:${DEMO_SERVER}`) && !this.profiles[userId]) {
+      return json(404, { errcode: 'M_NOT_FOUND', error: 'No such user' });
+    }
+    this.append(room.roomId, {
+      type: 'm.room.member',
+      sender: demoUsers.alice,
+      state_key: userId,
+      content: { membership, ...(membership === 'invite' ? { displayname: this.profiles[userId]?.displayname } : {}), ...(reason ? { reason } : {}) },
+      event_id: `$member-${++this.sentCount}`,
+      origin_server_ts: Date.now(),
+    });
+    return json(200, {});
+  }
+
+  // ————— Профиль и устройства —————
+
+  private putProfile({ params, body }: DemoRequest): Response {
+    const [userId, field] = params as [string, 'displayname' | 'avatar_url'];
+    if (userId !== demoUsers.alice) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not yours' });
+    const value = ((body ?? {}) as Record<string, string>)[field];
+    const profile = (this.profiles[userId] ??= { displayname: 'Алиса' });
+    if (field === 'displayname') profile.displayname = value ?? '';
+    else if (value) profile.avatar_url = value;
+    else delete profile.avatar_url;
+    // Как настоящий сервер: новое имя и фото расходятся по всем комнатам событием участия.
+    for (const room of this.rooms.values()) {
+      const joined = room.state.some((e) => e.type === 'm.room.member' && e.state_key === userId && e.content['membership'] === 'join');
+      if (!joined) continue;
+      this.append(room.roomId, {
+        type: 'm.room.member',
+        sender: userId,
+        state_key: userId,
+        content: { membership: 'join', displayname: profile.displayname, ...(profile.avatar_url ? { avatar_url: profile.avatar_url } : {}) },
+        event_id: `$profile-${++this.sentCount}`,
+        origin_server_ts: Date.now(),
+      });
+    }
+    return json(200, {});
+  }
+
+  private devices(): Response {
+    const devices = Object.keys(this.account.devices).map((id) => ({ device_id: id, display_name: 'Iskra Web', last_seen_ts: Date.now() }));
+    return json(200, { devices });
+  }
+
   /** Одно событие по ID — закреплённое, которого нет среди загруженного. */
   private event({ params }: DemoRequest): Response {
     const room = this.rooms.get(params[0] ?? '');
@@ -790,7 +941,7 @@ export class DemoHomeserver {
   }
 
   private profile({ params }: DemoRequest): Response {
-    const profile = demoProfiles[params[0] ?? ''];
+    const profile = this.profiles[params[0] ?? ''];
     return profile ? json(200, profile) : json(404, { errcode: 'M_NOT_FOUND', error: 'Profile not found' });
   }
 
