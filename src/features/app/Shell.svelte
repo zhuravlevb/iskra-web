@@ -92,6 +92,10 @@
         else if (roomId) roomView?.escape();
         else return;
         break;
+      case 'attach':
+        if (!roomId) return;
+        roomView?.attach();
+        break;
       case 'pageUp':
       case 'pageDown':
         if (!roomId) return;

@@ -22,6 +22,9 @@
   import { matrixHtml } from './html';
   import LinkedText from './LinkedText.svelte';
   import PollView from './PollView.svelte';
+  import FileCard from '../media/FileCard.svelte';
+  import MediaPreview from '../media/MediaPreview.svelte';
+  import type { MediaLoader } from '../../core/media/media';
   import { doubleTapReaction } from './reactions';
   import { attachmentLabel, serviceText } from './text';
 
@@ -33,13 +36,16 @@
     showSenders: boolean;
     senderPhoto?: string;
     actions: MessageActions;
+    media: MediaLoader;
   }
-  let { message, firstInRun, lastInRun, showSenders, senderPhoto, actions }: Props = $props();
+  let { message, firstInRun, lastInRun, showSenders, senderPhoto, actions, media }: Props = $props();
 
   const kind = $derived(message.kind);
   const failed = $derived(message.delivery.state === 'failed' ? message.delivery : null);
   /** С ушедшим можно что-то делать; с удалённым и служебным — нет. */
   const interactive = $derived(!!message.eventId && kind.type !== 'deleted' && kind.type !== 'service');
+  /** Картинка во весь пузырь: отступы пузыря — тоньше, фон — у самой картинки. */
+  const visual = $derived(kind.type === 'image' || kind.type === 'video' || kind.type === 'videoNote' || kind.type === 'sticker');
 
   function oncontextmenu(event: MouseEvent) {
     if (!interactive) return;
@@ -81,6 +87,8 @@
            (панель по наведению появляется и по фокусу), правый щелчок — дублирующий путь. -->
       <div
         class="bubble"
+        class:visual
+        class:bare={kind.type === 'sticker' || kind.type === 'videoNote'}
         role="article"
         class:notice={kind.type === 'notice'}
         class:muted={kind.type === 'deleted' || kind.type === 'unreadable' || kind.type === 'unsupported'}
@@ -110,11 +118,14 @@
             <em>{t('message.unsupported')}</em>
           {:else if kind.type === 'poll'}
             <PollView poll={kind.poll} canVote={!!message.eventId} onvote={(ids) => actions.vote(message, ids)} />
+          {:else if kind.type === 'image' || kind.type === 'video' || kind.type === 'videoNote' || kind.type === 'sticker'}
+            <MediaPreview kind={kind.type} attachment={kind.attachment} {media} onopen={() => actions.openMedia(message)} />
+            {#if kind.attachment.caption}<span class="caption text"><LinkedText text={kind.attachment.caption} /></span>{/if}
+          {:else if kind.type === 'file' || kind.type === 'audio' || kind.type === 'voice'}
+            <FileCard kind={kind.type} attachment={kind.attachment} {media} />
+            {#if kind.attachment.caption}<span class="caption text"><LinkedText text={kind.attachment.caption} /></span>{/if}
           {:else}
             <span class="label">{attachmentLabel(kind)}</span>
-            {#if 'attachment' in kind && kind.attachment.name && kind.type === 'file'}
-              {kind.attachment.name}
-            {/if}
           {/if}
           <span class="meta">
             {#if message.pinned}
@@ -326,6 +337,25 @@
   }
   .bubble {
     transition: transform var(--timing-chrome) ease-out;
+  }
+  /* По ширине картинки: подпись переносится под неё, а не растягивает пузырь. */
+  .bubble.visual {
+    width: min-content;
+    padding: var(--space-tight);
+  }
+  .bubble.visual .caption {
+    display: block;
+    padding: var(--space-tight) var(--space-close) 0;
+  }
+  .bubble.visual .meta {
+    margin-inline-end: var(--space-close);
+  }
+  /* Стикер и «кружочек» — без пузыря: у них своя форма. */
+  .bubble.bare,
+  .own .bubble.bare {
+    padding: 0;
+    background: transparent;
+    color: var(--color-text);
   }
   .bubble-wrap {
     position: relative;

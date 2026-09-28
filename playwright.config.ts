@@ -8,6 +8,11 @@ import { defineConfig, devices } from '@playwright/test';
  * не совпадает (облачные контейнеры). `PW_ENGINES=chromium` — прогнать один движок.
  */
 const chromiumPath = process.env['PW_CHROMIUM_PATH'];
+
+// Браузер пишет скачанное на диск в кодировке системы. Без UTF-8-локали (голый контейнер)
+// Chromium не может назвать файл «Что взять.txt» и называет его «download» — тест на
+// исходное имя упал бы из-за окружения, а не из-за приложения.
+if (!/utf-?8/i.test(process.env['LC_ALL'] || process.env['LANG'] || '')) process.env['LANG'] = 'C.UTF-8';
 const engines = (process.env['PW_ENGINES'] ?? 'chromium,firefox,webkit').split(',');
 
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true };

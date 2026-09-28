@@ -14,6 +14,8 @@
 <script lang="ts">
   import { viewport } from '../../design/viewport.svelte.ts';
   import { t } from '../../i18n/index.svelte.ts';
+  import type { OutgoingFile } from '../../core/media/upload';
+  import AttachmentTray from '../media/AttachmentTray.svelte';
   import type { ComposerContext } from './actions';
   import { attachmentLabel } from './text';
 
@@ -26,12 +28,32 @@
     oncancelcontext: () => void;
     /** `↑` в пустом поле. `true` — нашлось, что править. */
     oneditlast: () => boolean;
+    /** Вложения к отправке — их держит `RoomView`. */
+    attachments?: OutgoingFile[];
+    /** Выбрали, вставили или перетащили файлы. */
+    onfiles?: (files: File[]) => void;
+    onremoveattachment?: (index: number) => void;
     disabled?: boolean;
   }
-  let { text = $bindable(''), context, onsend, oninput, oncancelcontext, oneditlast, disabled = false }: Props = $props();
+  let {
+    text = $bindable(''),
+    context,
+    onsend,
+    oninput,
+    oncancelcontext,
+    oneditlast,
+    attachments = [],
+    onfiles,
+    onremoveattachment,
+    disabled = false,
+  }: Props = $props();
 
   let field: HTMLTextAreaElement | undefined = $state();
-  const empty = $derived(text.trim() === '');
+  let picker: HTMLInputElement | undefined = $state();
+  // С вложением можно отправить и без текста: текст тогда — подпись, а её может не быть.
+  const empty = $derived(text.trim() === '' && attachments.length === 0);
+  /** При правке вложений не бывает: меняется только текст. */
+  const canAttach = $derived(!!onfiles && context?.kind !== 'edit' && !disabled);
 
   /** Одна строка о том, на что отвечаем или что правим. */
   const quote = $derived.by(() => {
@@ -94,6 +116,25 @@
     send();
   }
 
+  /** `Ctrl/⌘ Shift U` и кнопка-скрепка. */
+  export function attach() {
+    if (canAttach) picker?.click();
+  }
+
+  /** Вставка из буфера: файлы — во вложения, текст — как обычно. */
+  function onpaste(event: ClipboardEvent) {
+    const files = [...(event.clipboardData?.files ?? [])];
+    if (!files.length || !canAttach) return;
+    event.preventDefault();
+    onfiles?.(files);
+  }
+
+  function picked() {
+    const files = [...(picker?.files ?? [])];
+    if (files.length) onfiles?.(files);
+    if (picker) picker.value = '';
+  }
+
   /** Чтобы открытый чат сразу принимал текст — на десктопе. На телефоне клавиатура не выскакивает сама. */
   export function focus() {
     if (viewport.finePointer) field?.focus();
@@ -118,6 +159,9 @@
     </button>
   </div>
 {/if}
+{#if attachments.length && onremoveattachment}
+  <AttachmentTray files={attachments} onremove={onremoveattachment} />
+{/if}
 <form
   class="row"
   onsubmit={(event) => {
@@ -125,6 +169,12 @@
     send();
   }}
 >
+  {#if onfiles}
+    <button type="button" class="attach" disabled={!canAttach} aria-label={t('room.attach')} title={t('room.attach')} onclick={attach}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7" /></svg>
+    </button>
+    <input bind:this={picker} type="file" multiple hidden onchange={picked} />
+  {/if}
   <textarea
     bind:this={field}
     bind:value={text}
@@ -134,6 +184,7 @@
     enterkeyhint={viewport.finePointer ? 'send' : 'enter'}
     {disabled}
     {onkeydown}
+    {onpaste}
     oninput={() => oninput?.(text)}
   ></textarea>
   <button type="submit" class="send" disabled={empty || disabled} aria-label={t('room.send')} title={t('room.send')}>
@@ -234,6 +285,31 @@
     outline: 2px solid var(--accent);
     outline-offset: 0;
     border-color: transparent;
+  }
+  .attach {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--size-navigation-bar);
+    height: var(--size-navigation-bar);
+    border: none;
+    border-radius: var(--radius-circle);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+  .attach:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .attach svg {
+    width: var(--size-icon-button);
+    height: var(--size-icon-button);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   .send {
     display: grid;

@@ -17,6 +17,7 @@
   import { Photo, pixelsFor } from '../rooms/faces.svelte.ts';
   import type { MessageActions } from './actions';
   import MessageRow from './MessageRow.svelte';
+  import UploadRow from '../media/UploadRow.svelte';
 
   interface Props {
     store: TimelineStore;
@@ -61,6 +62,7 @@
   // Лента поменяется (подгрузка, новое сообщение) — якорь снимается до перемены DOM.
   $effect.pre(() => {
     void store.items;
+    void store.uploads;
     anchor?.capture();
   });
 
@@ -156,8 +158,14 @@
             {showSenders}
             senderPhoto={showSenders ? photoOf(item.message.senderId, item.message.senderAvatarUrl) : undefined}
             {actions}
+            media={session.media}
           />
         {/if}
+      </div>
+    {/each}
+    {#each store.uploads as upload (upload.id)}
+      <div class="item">
+        <UploadRow {upload} onretry={() => store.retryUpload(upload.id)} oncancel={() => store.cancelUpload(upload.id)} />
       </div>
     {/each}
   </div>

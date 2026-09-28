@@ -9,10 +9,14 @@
 -->
 <script lang="ts">
   import ConfirmDialog from '../../design/ConfirmDialog.svelte';
+  import type { OutgoingFile } from '../../core/media/upload';
+  import { fileSize } from '../media/files';
+  import { prepareFile } from '../media/prepare';
+  import Viewer, { type ViewerItem } from '../media/Viewer.svelte';
   import type { Message } from '../../core/timeline/message';
   import type { UserSession } from '../../core/session/userSession.svelte.ts';
   import type { TimelineStore } from '../../core/timeline/timelineStore.svelte.ts';
-  import { t } from '../../i18n/index.svelte.ts';
+  import { i18n, t } from '../../i18n/index.svelte.ts';
   import type { ComposerContext, MessageActions } from './actions';
   import Composer from './Composer.svelte';
   import MessageMenu from './MessageMenu.svelte';
@@ -36,6 +40,10 @@
   let stashed = '';
   let menu = $state<{ message: Message; at: { x: number; y: number }; sheet: boolean } | null>(null);
   let deleting = $state<Message | null>(null);
+  let attachments = $state<OutgoingFile[]>([]);
+  let dropping = $state(false);
+  let tooLarge = $state('');
+  let viewing = $state<{ items: ViewerItem[]; start: string } | null>(null);
 
   $effect(() => {
     const id = roomId;
@@ -44,6 +52,8 @@
     text = '';
     context = null;
     stashed = '';
+    attachments = [];
+    tooLarge = '';
     let loaded = false;
     void session.draft(id).then((draft) => {
       loaded = true;
@@ -82,7 +92,12 @@
 
   function onsend(value: string) {
     if (!store) return;
-    if (context?.kind === 'edit') {
+    if (attachments.length && context?.kind !== 'edit') {
+      // Текст — подпись к первому вложению; ответ — тоже с ним.
+      store.sendFiles(attachments, value, context?.kind === 'reply' ? context.message : undefined);
+      attachments = [];
+      text = '';
+    } else if (context?.kind === 'edit') {
       store.edit(context.message, value);
       text = stashed;
       stashed = '';
@@ -108,6 +123,53 @@
       stashed = '';
     }
     context = null;
+  }
+
+  // ————— Вложения —————
+
+  /** Выбрали, вставили или перетащили — посчитать размеры и миниатюры и положить в лоток. */
+  async function addFiles(files: File[]) {
+    const limit = await session.uploadLimit();
+    const fitting = files.filter((file) => {
+      if (limit === undefined || file.size <= limit) return true;
+      tooLarge = t('upload.tooLarge', { name: file.name, limit: fileSize(limit, i18n.locale) });
+      return false;
+    });
+    if (fitting.length === files.length) tooLarge = '';
+    const prepared = await Promise.all(fitting.map(prepareFile));
+    attachments = [...attachments, ...prepared];
+  }
+
+  /** Перетаскивание: подсвечивается вся колонка чата, а не маленькая мишень. */
+  const carriesFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
+  let dragDepth = 0;
+  function ondragenter(event: DragEvent) {
+    if (!carriesFiles(event) || !canSend) return;
+    event.preventDefault();
+    dragDepth++;
+    dropping = true;
+  }
+  function ondragover(event: DragEvent) {
+    if (!carriesFiles(event) || !canSend) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  }
+  function ondragleave() {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dropping = false;
+  }
+  function ondrop(event: DragEvent) {
+    if (!carriesFiles(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    dropping = false;
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (files.length && canSend) void addFiles(files);
+  }
+
+  /** `Ctrl/⌘ Shift U`. */
+  export function attach(): void {
+    composer?.attach();
   }
 
   // ————— «Печатает…» с задержкой —————
@@ -151,6 +213,15 @@
     retry: (key) => store?.retry(key),
     discard: (key) => store?.discard(key),
     openMenu: (message, at, sheet) => (menu = { message, at, sheet }),
+    openMedia: (message) => {
+      // Листается всё, что в комнате загружено: фото, видео, «кружочки» — по порядку ленты.
+      const items: ViewerItem[] = (store?.messages ?? []).flatMap((m) =>
+        (m.kind.type === 'image' || m.kind.type === 'video' || m.kind.type === 'videoNote') && m.kind.attachment.source
+          ? [{ key: m.key, kind: m.kind.type, attachment: m.kind.attachment }]
+          : [],
+      );
+      if (items.some((i) => i.key === message.key)) viewing = { items, start: message.key };
+    },
   };
 
   /** `↑` в пустом композере. */
@@ -172,7 +243,10 @@
   }
 </script>
 
-<div class="room">
+<div class="room" role="region" aria-label={t('room.timeline')} {ondragenter} {ondragover} {ondragleave} {ondrop}>
+  {#if dropping}
+    <div class="drop" aria-hidden="true"><span>{t('room.dropToAttach')}</span></div>
+  {/if}
   {#if store && store.pinnedIds.length}
     <PinnedStrip
       message={store.pinnedMessage}
@@ -188,6 +262,12 @@
   {/if}
   <div class="below">
     <p class="typing" aria-live="polite">{showTyping ? typingLine : ''}</p>
+    {#if tooLarge}
+      <div class="failure" role="alert">
+        <span>{tooLarge}</span>
+        <button type="button" onclick={() => (tooLarge = '')}>{t('timeline.dismiss')}</button>
+      </div>
+    {/if}
     {#if store?.failure}
       <div class="failure" role="alert">
         <span>{t(`timeline.${store.failure}`)}</span>
@@ -204,8 +284,15 @@
     {oninput}
     oncancelcontext={cancelContext}
     oneditlast={editLast}
+    {attachments}
+    onfiles={(files) => void addFiles(files)}
+    onremoveattachment={(index) => (attachments = attachments.filter((_, i) => i !== index))}
   />
 </div>
+
+{#if viewing}
+  <Viewer items={viewing.items} start={viewing.start} media={session.media} onclose={() => (viewing = null)} />
+{/if}
 
 <MessageMenu message={menu?.message ?? null} at={menu?.at ?? { x: 0, y: 0 }} sheet={menu?.sheet ?? false} {actions} onclose={() => (menu = null)} />
 
@@ -225,10 +312,25 @@
 
 <style>
   .room {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
+  }
+  .drop {
+    position: absolute;
+    z-index: 5;
+    inset: var(--space-close);
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--accent);
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--color-background) 85%, transparent);
+    color: var(--accent);
+    font-size: var(--font-size-title);
+    font-weight: 600;
+    pointer-events: none;
   }
   .below {
     max-width: var(--column-timeline-max);

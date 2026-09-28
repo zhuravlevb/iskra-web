@@ -57,6 +57,11 @@
   --size-icon: 1.25rem; /* 20 — значок рядом с текстом */
   --size-icon-button: 1.5rem; /* 24 — значок в кнопке-иконке */
   --size-sign-in-mark: 3.5rem; /* 56 — Theme.Size.signInMark */
+  --size-media-max-width: 20rem; /* 320 — фото в ленте */
+  --size-media-max-height: 25rem; /* 400 — высокое фото не занимает весь экран */
+  --size-sticker: 10rem; /* 160 */
+  --size-video-note: 12.5rem; /* 200 — «кружочек» */
+  --size-attachment-tile: 4.5rem; /* 72 — вложение в лотке над полем */
 
   /* Колонки. Список чатов — Theme.Size.sidebarMinimum/Ideal/Maximum. */
   --column-list-min: 17.5rem; /* 280 */

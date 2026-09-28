@@ -107,6 +107,17 @@ export class UserSession {
     return new TimelineStore(this.client, roomId, uploadClientFor(this.client, this.account.method === 'demo' ? fetchFor(true) : undefined));
   }
 
+  private uploadLimitValue: Promise<number | undefined> | undefined;
+
+  /** Сколько сервер примет одним файлом (`m.upload.size`) — или «не сказал». */
+  uploadLimit(): Promise<number | undefined> {
+    this.uploadLimitValue ??= this.client
+      .getMediaConfig()
+      .then((config) => (typeof config['m.upload.size'] === 'number' ? config['m.upload.size'] : undefined))
+      .catch(() => undefined);
+    return this.uploadLimitValue;
+  }
+
   /** Черновик чата — под ключом аккаунта (`vault`). Не прочитался — пусто, а не ошибка. */
   async draft(roomId: string): Promise<string> {
     return vault.draft(this.userId, roomId).catch(() => '');

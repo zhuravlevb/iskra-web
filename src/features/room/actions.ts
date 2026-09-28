@@ -17,6 +17,8 @@ export interface MessageActions {
   remove(message: Message): void;
   retry(key: string): void;
   discard(key: string): void;
+  /** Просмотрщик — с этого фото или видео. */
+  openMedia(message: Message): void;
   /** Меню: у точки — для мыши, листом — для пальца. */
   openMenu(message: Message, at: { x: number; y: number }, sheet: boolean): void;
 }

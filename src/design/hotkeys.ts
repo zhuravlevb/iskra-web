@@ -24,6 +24,7 @@ export type HotkeyId =
   | 'pageUp'
   | 'pageDown'
   | 'editLast'
+  | 'attach'
   | 'settings'
   | 'help';
 
@@ -51,6 +52,7 @@ export const hotkeys: readonly Hotkey[] = [
   { id: 'pageUp', chords: [{ key: 'PageUp' }], inInput: true },
   { id: 'pageDown', chords: [{ key: 'PageDown' }], inInput: true },
   { id: 'editLast', chords: [{ key: 'ArrowUp' }], inInput: true, local: true },
+  { id: 'attach', chords: [{ key: 'u', primary: true, shift: true }], inInput: true },
   { id: 'settings', chords: [{ key: ',', primary: true }], inInput: true, planned: true },
   { id: 'help', chords: [{ key: '?' }, { key: '/', primary: true }] },
 ];
