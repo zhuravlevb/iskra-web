@@ -71,6 +71,8 @@ test('Alt ↓ — следующий чат', async ({ page }, info) => {
   test.skip(isPhone(info.project.name), 'клавиатура — десктоп');
   await signInToDemo(page);
   await page.getByRole('link', { name: /^Аня/ }).click();
+  // Сначала чат должен открыться — иначе «следующий» считается от «никакого».
+  await expect(page.getByRole('heading', { name: 'Аня', level: 1 })).toBeVisible();
   await page.keyboard.press('Alt+ArrowDown');
   await expect(page.getByRole('heading', { name: 'Выходные', level: 1 })).toBeVisible();
 });

@@ -30,7 +30,12 @@ export async function signInToDemo(page: Page): Promise<void> {
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
   await page.getByRole('button', { name: 'Продолжить' }).click();
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
-  await page.getByRole('button', { name: 'У меня только логин и пароль' }).click();
+  const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });
+  const problem = page.getByRole('alert');
+  await expect(passwordDoor.or(problem)).toBeVisible({ timeout: 15_000 });
+  // Если сервер не нашёлся — сказать, что написано на экране, а не упасть по таймауту.
+  if (await problem.isVisible()) throw new Error(`Вход в демо: ${await problem.innerText()}`);
+  await passwordDoor.click();
   await page.getByRole('textbox', { name: 'Имя пользователя' }).fill('alice');
   await page.getByLabel('Пароль').fill('password');
   await page.getByRole('button', { name: 'Войти с паролем' }).click();
