@@ -24,6 +24,7 @@
   import QuickSwitcher from '../rooms/QuickSwitcher.svelte';
   import { roomName } from '../rooms/text';
   import RoomView from '../room/RoomView.svelte';
+  import LockedHistoryStrip from '../recovery/LockedHistoryStrip.svelte';
 
   let { session }: { session: UserSession } = $props();
   let confirmingSignOut = $state(false);
@@ -111,6 +112,7 @@
       </Bar>
       <OfflineStrip {session} />
       <StorageNotice />
+      <LockedHistoryStrip recovery={session.recovery} onopen={() => app.openRecovery()} />
       <RoomList {session} />
     </div>
   {/snippet}

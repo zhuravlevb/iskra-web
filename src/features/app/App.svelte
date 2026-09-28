@@ -9,6 +9,8 @@
   import Loading from './Loading.svelte';
   import Shell from './Shell.svelte';
   import UpdatePrompt from './UpdatePrompt.svelte';
+  import RecoveryScreen from '../recovery/RecoveryScreen.svelte';
+  import VerificationSheet from '../recovery/VerificationSheet.svelte';
   import { preferences } from './preferences.svelte.ts';
 
   let { authCallback }: { authCallback: AuthCallback | null } = $props();
@@ -51,8 +53,19 @@
   <SignIn problem={app.phase.problem} ended={app.phase.ended} />
 {:else if app.phase.name === 'elsewhere'}
   <Elsewhere />
+{:else if app.recoveryStep && app.phase.session.recovery}
+  <RecoveryScreen
+    recovery={app.phase.session.recovery}
+    verification={app.phase.session.verification}
+    userId={app.phase.session.userId}
+    ondone={() => app.finishRecovery()}
+  />
 {:else}
   <Shell session={app.phase.session} />
+{/if}
+
+{#if app.phase.name === 'signed-in' && app.phase.session.verification}
+  <VerificationSheet verification={app.phase.session.verification} />
 {/if}
 
 <UpdatePrompt />

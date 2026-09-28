@@ -24,7 +24,7 @@ async function started(server = new DemoHomeserver()): Promise<{ client: MatrixC
     logger,
     userId: demoUsers.alice,
     deviceId: 'DEMODEVICE',
-    accessToken: 'demo-access-token',
+    accessToken: 'demo-token-DEMODEVICE',
   });
   const prepared = new Promise<void>((resolve) =>
     client!.on(ClientEvent.Sync, (state) => state === SyncState.Prepared && resolve()),

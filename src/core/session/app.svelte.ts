@@ -39,6 +39,11 @@ export class AppState {
   phase = $state<Phase>({ name: 'loading' });
   /** Что сказать про хранилище после входа — см. `persistence.ts`. */
   persistence = $state<PersistenceAdvice>('none');
+  /**
+   * Шаг между входом и чатами: восстановление переписки. Идёт после каждого *нового* входа
+   * (не после перезагрузки страницы — там о запертой переписке напомнит плашка в списке).
+   */
+  recoveryStep = $state(false);
 
   private lock: SessionLock | null = null;
   private hooks: AppHooks = {};
@@ -80,6 +85,7 @@ export class AppState {
   }
 
   private async finishSignIn(fresh: NewAccount): Promise<void> {
+    this.recoveryStep = true;
     // Демо стирается при каждом новом входе: своя база, ни следа прошлого запуска.
     if (fresh.method === 'demo') await wipeUserData(fresh.userId).catch(() => {});
     let account: Account;
@@ -136,6 +142,9 @@ export class AppState {
     }
     this.phase = { name: 'signed-in', session };
     void this.checkPersistence();
+    // Где стоит переписка — для плашки «Старая переписка заблокирована». На новом входе
+    // шаг восстановления спросит сам.
+    if (!this.recoveryStep) void session.recovery?.refresh();
   }
 
   private async checkPersistence(): Promise<void> {
@@ -152,6 +161,16 @@ export class AppState {
   async askPersistence(): Promise<void> {
     await requestPersistence();
     this.persistence = persistenceAdvice(currentEnvironment(await isPersisted()));
+  }
+
+  /** Шаг восстановления пройден (или отложен) — дальше чаты. */
+  finishRecovery(): void {
+    this.recoveryStep = false;
+  }
+
+  /** Плашка «Старая переписка заблокирована» — вернуться к шагу восстановления. */
+  openRecovery(): void {
+    this.recoveryStep = true;
   }
 
   dismissPersistence(): void {

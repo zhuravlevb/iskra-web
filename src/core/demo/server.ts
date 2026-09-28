@@ -12,6 +12,7 @@
  * Настоящего аккаунта он не трогает никогда: адрес — в зоне `.invalid`, которая по
  * RFC 2606 не резолвится, и ни один запрос отсюда в сеть не уходит.
  */
+import { emptyAccount, mergeSignatures, type DemoAccountState, type DemoStorage } from './account';
 import {
   buildDemoWorld,
   demoCredentials,
@@ -38,20 +39,24 @@ export interface DemoServerOptions {
   initialTimelineLimit?: number;
   /** Задержка ответа в варианте `slow`, мс. */
   slowDelayMs?: number;
+  /** Где держать аккаунт между загрузками страницы. Нет — в памяти. */
+  storage?: DemoStorage;
 }
 
 type Handler = (request: DemoRequest) => Promise<Response> | Response;
 
 interface DemoRequest {
   method: string;
+  /** Устройство, чей токен пришёл в `Authorization`. */
+  deviceId: string | undefined;
   url: URL;
   params: string[];
   body: unknown;
   signal: AbortSignal | undefined;
 }
 
-const DEVICE_ID = 'DEMODEVICE';
-const ACCESS_TOKEN = 'demo-access-token';
+/** Токен устройства: `demo-token-<deviceId>`. По нему сервер знает, кто спрашивает. */
+const tokenFor = (deviceId: string) => `demo-token-${deviceId}`;
 /** Сколько длинный опрос ждёт, если нового нет. SDK просит 30 секунд; демо не нужно столько. */
 const LONG_POLL_CAP_MS = 5_000;
 
@@ -68,10 +73,11 @@ export class DemoHomeserver {
   private readonly filters = new Map<string, unknown>();
   private readonly routes: Array<[string, RegExp, Handler]>;
   private batch = 0;
-  /** Ключи устройства, которые загрузило Rust-крипто: демо честно отдаёт их обратно. */
-  private deviceKeys: Record<string, unknown> | undefined;
-  private crossSigning: Record<string, unknown> = {};
-  private oneTimeKeys = 0;
+  /** Устройства, ключи, данные аккаунта, резервная копия — то, что переживает устройство. */
+  private readonly account: DemoAccountState;
+  private readonly storage: DemoStorage | undefined;
+  /** Данные аккаунта, изменённые с прошлой синхронизации. */
+  private pendingAccountData: Array<{ type: string; content: unknown }> = [];
   /** Что отдать следующей синхронизацией: вход по приглашению, выход, отметки о прочтении. */
   private pending: Array<Record<string, unknown>> = [];
   private wake: (() => void) | undefined;
@@ -83,6 +89,8 @@ export class DemoHomeserver {
     this.variant = options.variant ?? 'full';
     this.initialLimit = options.initialTimelineLimit ?? 20;
     this.slowDelayMs = options.slowDelayMs ?? 1_500;
+    this.storage = options.storage;
+    this.account = this.storage?.load() ?? emptyAccount();
     const world = buildDemoWorld(options.now ?? Date.now());
     this.rooms = new Map(world.rooms.map((room) => [room.roomId, room]));
     this.invites = world.invites;
@@ -99,7 +107,7 @@ export class DemoHomeserver {
       ['GET', re(`${c}/v3/login`), () => this.loginFlows()],
       ['POST', re(`${c}/v3/login`), (r) => this.login(r)],
       ['POST', re(`${c}/v3/logout`), () => json(200, {})],
-      ['GET', re(`${c}/v3/account/whoami`), () => json(200, { user_id: demoUsers.alice, device_id: DEVICE_ID })],
+      ['GET', re(`${c}/v3/account/whoami`), (r) => json(200, { user_id: demoUsers.alice, device_id: r.deviceId })],
       ['GET', re(`${c}/v3/capabilities`), () => this.capabilities()],
       ['GET', re(`${c}/v3/pushrules/?`), () => json(200, this.pushRules())],
       ['POST', re(`${c}/v3/user/([^/]+)/filter`), (r) => this.createFilter(r)],
@@ -124,20 +132,31 @@ export class DemoHomeserver {
       ['GET', re(`${c}/v1/rtc/transports`), () => unrecognized()],
       // Ключи. Демо не шифрует комнаты, но Rust-крипто поднимается и в нём — и спрашивает.
       ['POST', re(`${c}/v3/keys/upload`), (r) => this.uploadKeys(r)],
-      ['POST', re(`${c}/v3/keys/query`), () => this.queryKeys()],
+      ['POST', re(`${c}/v3/keys/query`), (r) => this.queryKeys(r)],
       ['POST', re(`${c}/v3/keys/claim`), () => json(200, { one_time_keys: {}, failures: {} })],
       ['POST', re(`${c}/v3/keys/device_signing/upload`), (r) => this.uploadCrossSigning(r)],
-      ['POST', re(`${c}/v3/keys/signatures/upload`), () => json(200, { failures: {} })],
+      ['POST', re(`${c}/v3/keys/signatures/upload`), (r) => this.uploadSignatures(r)],
       ['PUT', re(`${c}/v3/sendToDevice/([^/]+)/([^/]+)`), () => json(200, {})],
       // Бэкапа ключей нет. Это ответ «бэкапа нет», а не «не знаю»: перепутать их — значит
       // создать новый бэкап поверх живого (см. план, «Восстановление переписки»).
-      ['GET', re(`${c}/v3/room_keys/version`), () => json(404, { errcode: 'M_NOT_FOUND', error: 'No current backup version' })],
-      ['GET', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), () => json(404, { errcode: 'M_NOT_FOUND', error: 'Account data not found' })],
+      ['GET', re(`${c}/v3/room_keys/version`), () => this.backupVersion(undefined)],
+      ['GET', re(`${c}/v3/room_keys/version/([^/]+)`), (r) => this.backupVersion(r.params[0])],
+      ['POST', re(`${c}/v3/room_keys/version`), (r) => this.createBackup(r)],
+      ['PUT', re(`${c}/v3/room_keys/version/([^/]+)`), (r) => this.updateBackup(r)],
+      ['DELETE', re(`${c}/v3/room_keys/version/([^/]+)`), (r) => this.deleteBackup(r.params[0]!)],
+      ['PUT', re(`${c}/v3/room_keys/keys`), (r) => this.putBackupKeys(r)],
+      ['GET', re(`${c}/v3/room_keys/keys`), (r) => this.getBackupKeys(r)],
+      ['GET', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), (r) => this.getAccountData(r.params[1]!)],
+      ['PUT', re(`${c}/v3/user/([^/]+)/account_data/([^/]+)`), (r) => this.putAccountData(r.params[1]!, r.body)],
     ];
   }
 
   /** Подменный `fetch` для `createClient({ fetchFn })`. */
   readonly fetch: typeof globalThis.fetch = async (input, init) => {
+    // Как у сети: ответ — не раньше следующей макрозадачи. Без этого демо отвечало бы на одних
+    // микрозадачах, и цикл исходящих запросов Rust-крипто не отдавал бы очередь таймерам —
+    // а на таймерах держится длинный опрос, которого ждёт, например, запись данных аккаунта.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const request = new Request(input, init);
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
@@ -158,6 +177,9 @@ export class DemoHomeserver {
       }
     }
 
+    const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? url.searchParams.get('access_token') ?? '';
+    const deviceId = token.startsWith('demo-token-') ? token.slice('demo-token-'.length) : undefined;
+
     if (this.variant === 'slow') await delay(this.slowDelayMs, init?.signal ?? undefined);
 
     for (const [routeMethod, pattern, handler] of this.routes) {
@@ -166,6 +188,7 @@ export class DemoHomeserver {
       if (!match) continue;
       return handler({
         method,
+        deviceId,
         url,
         params: match.slice(1).map((p) => decodeURIComponent(p ?? '')),
         body,
@@ -211,38 +234,164 @@ export class DemoHomeserver {
           ? this.variant !== 'password-only' && request.token === 'demo-login-token'
           : false;
     if (!ok) return json(403, { errcode: 'M_FORBIDDEN', error: 'Invalid username or password' });
+    // Каждый вход — новое устройство, как у настоящего сервера: иначе второй вход после
+    // выхода столкнулся бы с ключами прошлого.
+    const deviceId = `DEMO${String(this.account.nextDevice++).padStart(3, '0')}`;
+    this.account.devices[deviceId] = { oneTimeKeys: 0 };
+    this.save();
     return json(200, {
       user_id: demoUsers.alice,
-      access_token: ACCESS_TOKEN,
-      device_id: DEVICE_ID,
+      access_token: tokenFor(deviceId),
+      device_id: deviceId,
       well_known: { 'm.homeserver': { base_url: DEMO_BASE_URL } },
     });
   }
 
-  private uploadKeys({ body }: DemoRequest): Response {
-    const request = (body ?? {}) as { device_keys?: Record<string, unknown>; one_time_keys?: Record<string, unknown> };
-    if (request.device_keys) this.deviceKeys = request.device_keys;
-    this.oneTimeKeys += Object.keys(request.one_time_keys ?? {}).length;
-    return json(200, { one_time_key_counts: { signed_curve25519: this.oneTimeKeys } });
+  private save(): void {
+    this.storage?.save(this.account);
   }
 
-  private queryKeys(): Response {
+  private uploadKeys({ body, deviceId }: DemoRequest): Response {
+    const request = (body ?? {}) as { device_keys?: Record<string, unknown>; one_time_keys?: Record<string, unknown> };
+    const device = (this.account.devices[deviceId ?? ''] ??= { oneTimeKeys: 0 });
+    if (request.device_keys) device.keys = request.device_keys;
+    device.oneTimeKeys += Object.keys(request.one_time_keys ?? {}).length;
+    this.save();
+    return json(200, { one_time_key_counts: { signed_curve25519: device.oneTimeKeys } });
+  }
+
+  /**
+   * Ключи — только тех, о ком спросили. Ответить ключами Алисы на вопрос об Ане — значит
+   * подсунуть Rust-крипто чужую (старую) личность посреди «Начать заново», и оно выбросит
+   * только что созданные закрытые ключи как не совпавшие.
+   */
+  private queryKeys({ body }: DemoRequest): Response {
+    const asked = Object.keys(((body ?? {}) as { device_keys?: Record<string, unknown> }).device_keys ?? {});
+    const device_keys: Record<string, Record<string, unknown>> = {};
+    for (const user of asked) device_keys[user] = {};
+    const aboutAlice = asked.includes(demoUsers.alice);
+    if (aboutAlice) {
+      for (const [id, device] of Object.entries(this.account.devices)) if (device.keys) device_keys[demoUsers.alice]![id] = device.keys;
+    }
+    const byUser = (key: string) => (aboutAlice && this.account.crossSigning[key] ? { [demoUsers.alice]: this.account.crossSigning[key] } : {});
     return json(200, {
-      device_keys: { [demoUsers.alice]: this.deviceKeys ? { [DEVICE_ID]: this.deviceKeys } : {} },
-      ...this.crossSigning,
+      device_keys,
+      master_keys: byUser('master_key'),
+      self_signing_keys: byUser('self_signing_key'),
+      user_signing_keys: byUser('user_signing_key'),
       failures: {},
     });
   }
 
+  /**
+   * Ключи кросс-подписи. Первые — без вопросов (MSC3967), а заменить существующие — только
+   * с паролем, как у настоящего сервера: так в демо видно и «Начать заново» с паролем.
+   */
   private uploadCrossSigning({ body }: DemoRequest): Response {
-    const keys = (body ?? {}) as Record<string, unknown>;
-    const byUser = (key: string) => (keys[key] ? { [demoUsers.alice]: keys[key] } : {});
-    this.crossSigning = {
-      master_keys: byUser('master_key'),
-      self_signing_keys: byUser('self_signing_key'),
-      user_signing_keys: byUser('user_signing_key'),
-    };
+    const keys = (body ?? {}) as Record<string, unknown> & { auth?: { type?: string; password?: string; session?: string } };
+    const replacing = !!this.account.crossSigning['master_key'];
+    if (replacing) {
+      const auth = keys.auth;
+      const ok = auth?.type === 'm.login.password' && auth.password === demoCredentials.password;
+      if (!ok) {
+        return json(401, {
+          flows: [{ stages: ['m.login.password'] }],
+          params: {},
+          session: 'demo-uia',
+          ...(auth ? { errcode: 'M_FORBIDDEN', error: 'Invalid password' } : {}),
+        });
+      }
+    }
+    for (const name of ['master_key', 'self_signing_key', 'user_signing_key']) {
+      if (keys[name]) this.account.crossSigning[name] = keys[name] as Record<string, unknown>;
+    }
+    this.save();
     return json(200, {});
+  }
+
+  private uploadSignatures({ body }: DemoRequest): Response {
+    const uploads = (body ?? {}) as Record<string, Record<string, { signatures?: Record<string, Record<string, string>> }>>;
+    for (const [userId, signed] of Object.entries(uploads)) mergeSignatures(this.account, userId, signed);
+    this.save();
+    return json(200, { failures: {} });
+  }
+
+  // ————— Данные аккаунта —————
+
+  private getAccountData(type: string): Response {
+    const content = this.account.accountData[type];
+    return content === undefined ? json(404, { errcode: 'M_NOT_FOUND', error: 'Account data not found' }) : json(200, content);
+  }
+
+  private putAccountData(type: string, content: unknown): Response {
+    this.account.accountData[type] = content;
+    this.save();
+    this.pendingAccountData.push({ type, content });
+    this.wake?.();
+    return json(200, {});
+  }
+
+  // ————— Резервная копия ключей —————
+
+  private latestBackup() {
+    return this.account.backups.at(-1);
+  }
+
+  private backupInfo(backup: { version: string; algorithm: string; auth_data: unknown; etag: number; rooms: Record<string, { sessions: Record<string, unknown> }> }) {
+    const count = Object.values(backup.rooms).reduce((n, room) => n + Object.keys(room.sessions).length, 0);
+    return { version: backup.version, algorithm: backup.algorithm, auth_data: backup.auth_data, etag: String(backup.etag), count };
+  }
+
+  private backupVersion(version: string | undefined): Response {
+    const backup = version ? this.account.backups.find((b) => b.version === version) : this.latestBackup();
+    // «Бэкапа нет» — это 404 M_NOT_FOUND, и это ответ, а не «не знаю» (см. план).
+    if (!backup) return json(404, { errcode: 'M_NOT_FOUND', error: 'No current backup version' });
+    return json(200, this.backupInfo(backup));
+  }
+
+  private createBackup({ body }: DemoRequest): Response {
+    const request = (body ?? {}) as { algorithm?: string; auth_data?: Record<string, unknown> };
+    const version = String(this.account.backups.length + 1);
+    this.account.backups.push({ version, algorithm: request.algorithm ?? '', auth_data: request.auth_data ?? {}, etag: 0, rooms: {} });
+    this.save();
+    return json(200, { version });
+  }
+
+  private updateBackup({ params, body }: DemoRequest): Response {
+    const backup = this.account.backups.find((b) => b.version === params[0]);
+    if (!backup) return json(404, { errcode: 'M_NOT_FOUND', error: 'No such backup' });
+    backup.auth_data = ((body ?? {}) as { auth_data?: Record<string, unknown> }).auth_data ?? backup.auth_data;
+    this.save();
+    return json(200, {});
+  }
+
+  private deleteBackup(version: string): Response {
+    this.account.backups = this.account.backups.filter((b) => b.version !== version);
+    this.save();
+    return json(200, {});
+  }
+
+  private putBackupKeys({ url, body }: DemoRequest): Response {
+    const backup = this.account.backups.find((b) => b.version === url.searchParams.get('version'));
+    const latest = this.latestBackup();
+    if (!backup || backup !== latest) {
+      return json(403, { errcode: 'M_WRONG_ROOM_KEYS_VERSION', error: 'Wrong backup version', current_version: latest?.version });
+    }
+    const rooms = ((body ?? {}) as { rooms?: Record<string, { sessions?: Record<string, unknown> }> }).rooms ?? {};
+    for (const [roomId, room] of Object.entries(rooms)) {
+      const target = (backup.rooms[roomId] ??= { sessions: {} });
+      Object.assign(target.sessions, room.sessions ?? {});
+    }
+    backup.etag++;
+    this.save();
+    const info = this.backupInfo(backup);
+    return json(200, { count: info.count, etag: info.etag });
+  }
+
+  private getBackupKeys({ url }: DemoRequest): Response {
+    const backup = this.account.backups.find((b) => b.version === url.searchParams.get('version'));
+    if (!backup) return json(404, { errcode: 'M_NOT_FOUND', error: 'No such backup' });
+    return json(200, { rooms: backup.rooms });
   }
 
   private capabilities(): Response {
@@ -324,7 +473,7 @@ export class DemoHomeserver {
     if (since) {
       // Нового ничего нет — держим длинный опрос, как настоящий сервер, но недолго;
       // появилось (вошли по приглашению, прочитали) — отвечаем сразу.
-      if (this.pending.length === 0) {
+      if (this.pending.length === 0 && this.pendingAccountData.length === 0) {
         const timeout = Number(url.searchParams.get('timeout') ?? 0);
         await Promise.race([
           delay(Math.min(timeout, LONG_POLL_CAP_MS), signal),
@@ -369,7 +518,12 @@ export class DemoHomeserver {
     return {
       next_batch: `s${++this.batch}`,
       rooms: { join, invite, leave: {} },
-      account_data: { events: [{ type: 'm.direct', content: demoDirect }] },
+      account_data: {
+        events: [
+          { type: 'm.direct', content: demoDirect },
+          ...Object.entries(this.account.accountData).map(([type, content]) => ({ type, content })),
+        ],
+      },
       presence: { events: [] },
       to_device: { events: [] },
       device_lists: { changed: [], left: [] },
@@ -385,7 +539,12 @@ export class DemoHomeserver {
       if (change['kind'] === 'leave') leave[roomId] = change['body'];
       else join[roomId] = mergeJoin(join[roomId] as Record<string, unknown> | undefined, change['body'] as Record<string, unknown>);
     }
-    return { next_batch: `s${++this.batch}`, rooms: { join, invite: {}, leave } };
+    const accountData = this.pendingAccountData.splice(0);
+    return {
+      next_batch: `s${++this.batch}`,
+      rooms: { join, invite: {}, leave },
+      ...(accountData.length ? { account_data: { events: accountData } } : {}),
+    };
   }
 
   private enqueue(change: Record<string, unknown>): void {

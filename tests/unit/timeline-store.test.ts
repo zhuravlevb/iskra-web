@@ -22,7 +22,7 @@ async function started(): Promise<{ client: MatrixClient; server: DemoHomeserver
     logger: quietLogger(),
     userId: demoUsers.alice,
     deviceId: 'DEMODEVICE',
-    accessToken: 'demo-access-token',
+    accessToken: 'demo-token-DEMODEVICE',
   });
   const prepared = new Promise<void>((resolve) => client!.on(ClientEvent.Sync, (s) => s === SyncState.Prepared && resolve()));
   await client.startClient({ initialSyncLimit: 20, pendingEventOrdering: PendingEventOrdering.Detached });

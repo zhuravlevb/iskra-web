@@ -24,6 +24,9 @@ import { fetchFor } from '../auth/server';
 import { ThumbnailCache } from '../media/thumbnails';
 import { RoomListStore } from '../rooms/roomListStore.svelte.ts';
 import { TimelineStore } from '../timeline/timelineStore.svelte.ts';
+import { RecoveryStore } from '../encryption/recovery.svelte.ts';
+import { SecretStorageKeyHolder } from '../encryption/secretStorageKey';
+import { VerificationStore } from '../encryption/verification.svelte.ts';
 import { deleteDatabase } from '../storage/idb';
 import { fromBase64 } from '../storage/secretBox';
 import type { Account, AccountSecrets } from '../storage/vault';
@@ -66,12 +69,16 @@ export class UserSession {
   readonly rooms: RoomListStore;
   /** Аватарки и миниатюры: с токеном, в памяти, с потолком. */
   readonly thumbnails: ThumbnailCache;
+  /** Код восстановления и доступ к старой переписке. `null` — сессия без крипто (тесты). */
+  readonly recovery: RecoveryStore | null;
+  /** Сверка эмодзи с другим устройством. */
+  readonly verification: VerificationStore | null;
   private readonly client: MatrixClient;
   private readonly account: Account;
   private readonly detach: Array<() => void> = [];
   private stopped = false;
 
-  private constructor(client: MatrixClient, account: Account) {
+  private constructor(client: MatrixClient, account: Account, keys: SecretStorageKeyHolder | null) {
     this.client = client;
     this.account = account;
     this.userId = account.userId;
@@ -81,6 +88,8 @@ export class UserSession {
       accessToken: () => client.getAccessToken(),
       fetch: fetchFor(account.method === 'demo'),
     });
+    this.recovery = keys ? new RecoveryStore(client, keys) : null;
+    this.verification = keys ? new VerificationStore(client) : null;
   }
 
   /** Лента комнаты. Живёт, пока открыт чат: тот, кто открыл, её и `destroy()`. */
@@ -135,8 +144,11 @@ export class UserSession {
       tokenRefreshFunction = refresher.tokenRefreshFunction;
     }
 
+    // Ключ секретного хранилища — только на время операции, см. `SecretStorageKeyHolder`.
+    const keys = crypto ? new SecretStorageKeyHolder() : null;
     const client = createClient({
       baseUrl: account.homeserverUrl,
+      ...(keys ? { cryptoCallbacks: keys.callbacks } : {}),
       userId: account.userId,
       deviceId: account.deviceId,
       accessToken: secrets.accessToken,
@@ -157,7 +169,7 @@ export class UserSession {
       });
     }
 
-    const session = new UserSession(client, account);
+    const session = new UserSession(client, account, keys);
     session.listen(events);
     await client.startClient({
       initialSyncLimit: 20,
@@ -215,6 +227,7 @@ export class UserSession {
     this.stopped = true;
     for (const off of this.detach.splice(0)) off();
     this.rooms.destroy();
+    this.verification?.destroy();
     this.thumbnails.clear();
     this.client.stopClient();
   }

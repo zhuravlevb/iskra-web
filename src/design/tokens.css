@@ -74,6 +74,8 @@
   /* Шрифт — системный. Никаких загружаемых шрифтов с чужих CDN. */
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell,
     'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  /* Код восстановления: моноширинный, чтобы «0» и «O», «l» и «1» не спорили. */
+  --font-code: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --font-size-body: 1rem;
   --font-size-caption: 0.8125rem; /* 13 */
   --font-size-title: 1.25rem; /* 20 */

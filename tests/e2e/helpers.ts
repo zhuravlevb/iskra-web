@@ -47,8 +47,20 @@ function recordConsole(page: Page): string[] {
   return lines;
 }
 
-/** Вход в демо: alice / password. */
-export async function signInToDemo(page: Page): Promise<void> {
+/**
+ * Вход в демо: alice / password — и шаг восстановления после него. Новый аккаунт получает
+ * код (его и возвращаем); аккаунт, у которого код уже есть, шаг откладывает («Закрыть») —
+ * тесту чатов переписка из резервной копии не нужна.
+ */
+export async function signInToDemo(page: Page): Promise<string | null> {
+  await enterDemoCredentials(page);
+  const code = await passRecoveryStep(page);
+  await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
+  return code;
+}
+
+/** До нажатия «Войти с паролем» включительно. */
+export async function enterDemoCredentials(page: Page): Promise<void> {
   const log = recordConsole(page);
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -78,7 +90,28 @@ export async function signInToDemo(page: Page): Promise<void> {
   await page.getByRole('textbox', { name: 'Имя пользователя' }).fill('alice');
   await page.getByLabel('Пароль').fill('password');
   await page.getByRole('button', { name: 'Войти с паролем' }).click();
-  await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
+}
+
+async function passRecoveryStep(page: Page): Promise<string | null> {
+  const save = page.getByRole('heading', { name: 'Сохраните код' });
+  const unlock = page.getByRole('heading', { name: 'Разблокируйте переписку' });
+  const chats = page.getByRole('heading', { name: 'Чаты', level: 1 });
+  // Резервная копия создаётся с ключами кросс-подписи — на медленном движке это секунды.
+  await expect(save.or(unlock).or(chats)).toBeVisible({ timeout: 30_000 });
+  if (await save.isVisible()) return saveRecoveryCode(page);
+  if (await unlock.isVisible()) await page.getByRole('button', { name: 'Закрыть' }).click();
+  return null;
+}
+
+/** Экран «Сохраните код»: забрать код, поставить галочку, «Я сохранил код». */
+export async function saveRecoveryCode(page: Page): Promise<string> {
+  const code = (await page.getByTestId('recovery-code').innerText()).trim();
+  const saved = page.getByRole('button', { name: 'Я сохранил код' });
+  // Без галочки кнопка не нажимается: сначала прочитать предупреждение.
+  await expect(saved).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'Я записал код в надёжное место' }).check();
+  await saved.click();
+  return code;
 }
 
 export const isPhone = (projectName: string) => projectName.endsWith('phone');
