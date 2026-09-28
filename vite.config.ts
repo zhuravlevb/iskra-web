@@ -64,7 +64,16 @@ export default defineConfig({
         // Rust-крипто в WASM весит несколько мегабайт.
         maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
         navigateFallback: 'index.html',
-        runtimeCaching: [],
+        // Шрифт Inter — не в предзагрузке: его качает только тот, кто выбрал. Зато, раз
+        // скачав, держим: без сети PWA с Inter не должна откатываться на системный.
+        // Файлы свои и с хэшем в имени — неизменяемые, ничего личного в них нет.
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, url }) => sameOrigin && url.pathname.endsWith('.woff2'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'iskra-fonts', expiration: { maxEntries: 32 } },
+          },
+        ],
         cleanupOutdatedCaches: true,
       },
     }),

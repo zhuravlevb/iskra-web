@@ -2,6 +2,7 @@
 import { authCallback } from './boot';
 import { mount } from 'svelte';
 import './design/base.css';
+import './design/fonts/inter.css';
 import App from './features/app/App.svelte';
 
 const target = document.getElementById('app');

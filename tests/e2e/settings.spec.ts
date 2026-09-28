@@ -99,7 +99,7 @@ test('новая комната и новый чат — создаются и �
   await expect(page.getByRole('log')).toContainText('Возьми плед, там ветрено', { timeout: 10_000 });
 });
 
-test('настройки: имя, язык, тема; устройство и хранилище видны', async ({ page }, info) => {
+test('настройки: имя, язык, тема, шрифт; устройство и хранилище видны', async ({ page }, info) => {
   await signInToDemo(page);
   await page.getByRole('button', { name: 'Настройки' }).click();
   await expect(page.getByRole('heading', { name: 'Ваш профиль' })).toBeVisible();
@@ -114,6 +114,14 @@ test('настройки: имя, язык, тема; устройство и х
 
   await page.getByRole('radio', { name: 'Тёмное' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  // Inter — из своих файлов под боевой CSP: и кириллица, и латиница действительно загрузились.
+  await page.getByRole('radio', { name: 'Inter' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'inter');
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Inter"?,/);
+  expect(await page.evaluate(async () => (await document.fonts.load('1rem Inter', 'Привет, hello')).length)).toBeGreaterThan(1);
+  await page.getByRole('radio', { name: 'Системный' }).click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-font');
+
   await page.getByRole('radio', { name: 'English' }).click();
   await expect(page.getByRole('heading', { name: 'Your profile' })).toBeVisible();
   await page.getByRole('radio', { name: 'Русский' }).click();

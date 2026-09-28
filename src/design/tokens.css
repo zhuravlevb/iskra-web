@@ -76,9 +76,11 @@
   --timing-reaction: 250ms;
   --timing-deletion: 300ms;
 
-  /* Шрифт — системный. Никаких загружаемых шрифтов с чужих CDN. */
-  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell,
+  /* Шрифт — системный по умолчанию; Inter — по выбору (`data-font` на <html>), из своих файлов,
+     `fonts/inter.css`. Никаких загружаемых шрифтов с чужих CDN. */
+  --font-system: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell,
     'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  --font-body: var(--font-system);
   /* Код восстановления: моноширинный, чтобы «0» и «O», «l» и «1» не спорили. */
   --font-code: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --font-size-body: 1rem;
@@ -169,4 +171,9 @@
     --color-danger: #ff453a;
     --color-selected: rgb(255 255 255 / 0.1);
   }
+}
+
+/* Inter: перед системным, чтобы эмодзи и то, чего в Inter нет, брались оттуда же, что и раньше. */
+:root[data-font='inter'] {
+  --font-body: 'Inter', var(--font-system);
 }

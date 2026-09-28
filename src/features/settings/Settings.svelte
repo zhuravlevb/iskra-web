@@ -17,7 +17,7 @@
   import type { UserSession } from '../../core/session/userSession.svelte.ts';
   import { isPersisted, requestPersistence } from '../../core/storage/persistence';
   import { i18n, t, type TextKey } from '../../i18n/index.svelte.ts';
-  import { accents, faceModes, preferences, type Accent, type Appearance, type FaceMode, type LanguageChoice } from '../app/preferences.svelte.ts';
+  import { accents, faceModes, fonts, preferences, type Accent, type Appearance, type FaceMode, type Font, type LanguageChoice } from '../app/preferences.svelte.ts';
   import { fileSize } from '../media/files';
   import RecoveryCode from '../recovery/RecoveryCode.svelte';
   import { Photo, pixelsFor } from '../rooms/faces.svelte.ts';
@@ -148,6 +148,7 @@
     creaturesAlways: { label: 'onboarding.faces.faces', help: 'onboarding.faces.facesHelp' },
   };
   const accentLabel = (accent: Accent): TextKey => `appearance.color.${accent}`;
+  const fontLabel = (font: Font): TextKey => `appearance.font.${font}`;
   const languages: Array<{ value: LanguageChoice; label: TextKey }> = [
     { value: 'system', label: 'language.system' },
     { value: 'ru', label: 'language.ru' },
@@ -255,6 +256,15 @@
           title={t(accentLabel(accent))}
           onclick={() => (preferences.accent = accent)}
         ></button>
+      {/each}
+    </div>
+    <h3 id="font-title">{t('appearance.font')}</h3>
+    <div class="options" role="radiogroup" aria-labelledby="font-title">
+      {#each fonts as font (font)}
+        <!-- Каждый вариант написан своим шрифтом: видно, что выбираешь. -->
+        <button type="button" role="radio" data-font={font} aria-checked={preferences.font === font} onclick={() => (preferences.font = font)}>
+          {t(fontLabel(font))}
+        </button>
       {/each}
     </div>
     <h3 id="faces-title">{t('onboarding.faces.title')}</h3>
@@ -460,6 +470,12 @@
     font: inherit;
     text-align: start;
     cursor: pointer;
+  }
+  .options button[data-font='system'] {
+    font-family: var(--font-system);
+  }
+  .options button[data-font='inter'] {
+    font-family: 'Inter', var(--font-system);
   }
   .options button + button {
     border-block-start: var(--border-hairline) solid var(--color-separator);
