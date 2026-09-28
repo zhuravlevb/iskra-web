@@ -28,6 +28,8 @@ export function watchForProblems(page: Page): string[] {
 const consoles = new WeakMap<Page, string[]>();
 /** Запросы, которые начались и не закончились, — кто держит страницу недогруженной. */
 const pending = new WeakMap<Page, Set<string>>();
+/** Сколько запросов страница вообще начала. */
+const started = new WeakMap<Page, number>();
 function recordConsole(page: Page): string[] {
   let lines = consoles.get(page);
   if (!lines) {
@@ -40,7 +42,10 @@ function recordConsole(page: Page): string[] {
     page.on('requestfailed', (r) => record.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText ?? ''}`));
     const open = new Set<string>();
     pending.set(page, open);
-    page.on('request', (r) => open.add(r.url()));
+    page.on('request', (r) => {
+      open.add(r.url());
+      started.set(page, (started.get(page) ?? 0) + 1);
+    });
     page.on('requestfinished', (r) => open.delete(r.url()));
     page.on('requestfailed', (r) => open.delete(r.url()));
   }
@@ -82,7 +87,16 @@ export async function enterDemoCredentials(page: Page): Promise<void> {
   const log = recordConsole(page);
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
   try {
-    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    try {
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 10_000 });
+    } catch (error) {
+      // Firefox под Playwright изредка не начинает переход вовсе: ни одного запроса, ни
+      // перехода, ни строки в консоли — до нашего кода дело не дошло. Тогда — ещё раз;
+      // если запросы были, это уже наша страница, и повтор ничего не скроет.
+      if (started.get(page)) throw error;
+      log.push('[retry] переход не начался — ещё раз');
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    }
   } catch (error) {
     // Firefox в CI однажды не дождался и DOMContentLoaded. Он приходит после того, как
     // исполнены модули бандла, — значит, какой-то из них не пришёл. Какой — скажет ошибка.
