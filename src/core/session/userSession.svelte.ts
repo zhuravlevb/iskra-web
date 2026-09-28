@@ -14,6 +14,7 @@ import {
   IndexedDBStore,
   MemoryStore,
   OAuth2,
+  PendingEventOrdering,
   SyncState,
   TokenRefresher,
   type MatrixClient,
@@ -22,6 +23,7 @@ import {
 import { fetchFor } from '../auth/server';
 import { ThumbnailCache } from '../media/thumbnails';
 import { RoomListStore } from '../rooms/roomListStore.svelte.ts';
+import { TimelineStore } from '../timeline/timelineStore.svelte.ts';
 import { deleteDatabase } from '../storage/idb';
 import { fromBase64 } from '../storage/secretBox';
 import type { Account, AccountSecrets } from '../storage/vault';
@@ -79,6 +81,16 @@ export class UserSession {
       accessToken: () => client.getAccessToken(),
       fetch: fetchFor(account.method === 'demo'),
     });
+  }
+
+  /** Лента комнаты. Живёт, пока открыт чат: тот, кто открыл, её и `destroy()`. */
+  timeline(roomId: string): TimelineStore {
+    return new TimelineStore(this.client, roomId);
+  }
+
+  /** Можно ли писать в комнату: вошли, а не только приглашены. */
+  canSend(roomId: string): boolean {
+    return this.client.getRoom(roomId)?.getMyMembership() === 'join';
   }
 
   /** Как меня зовут и как я выгляжу — для своего лица в группе лиц. */
@@ -147,7 +159,13 @@ export class UserSession {
 
     const session = new UserSession(client, account);
     session.listen(events);
-    await client.startClient({ initialSyncLimit: 20, lazyLoadMembers: true });
+    await client.startClient({
+      initialSyncLimit: 20,
+      lazyLoadMembers: true,
+      // Не ушедшие — отдельно от ленты и в её конце, пока не уйдут: «Не отправлено» не
+      // должно тонуть в истории, если сервер тем временем прислал новое.
+      pendingEventOrdering: PendingEventOrdering.Detached,
+    });
     return session;
   }
 

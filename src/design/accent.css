@@ -24,8 +24,18 @@
   :root:not([data-theme='light']) { --accent: var(--accent-dark); }
 }
 
+/* Свой пузырь — заливка акцентом, надпись — парой к нему (`AccentTheme.bubble` / `onBubble`). */
+:root {
+  --bubble-own: var(--accent);
+  --on-bubble-own: var(--on-accent);
+}
+
 /* Монохромный: акцент — цвет текста, надпись — цвет фона. */
 :root[data-accent='mono'] {
   --accent: var(--color-text);
   --on-accent: var(--color-background);
+  /* Пузырь, залитый чистым чёрным, превращает переписку в домино: у mono свой пузырь —
+     серый, на тон глубже входящего, и обычный цвет текста на нём. */
+  --bubble-own: color-mix(in srgb, var(--color-text) 16%, transparent);
+  --on-bubble-own: var(--color-text);
 }

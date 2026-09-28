@@ -87,6 +87,12 @@
   --tap-target: 3rem; /* 48 — палец */
   --row-room: 4.5rem; /* 72 = лицо 56 + 2 × 8 */
   --timeline-gutter: var(--space-roomy);
+  /* Пузырь: одна строка текста + вертикальные отступы должна остаться ниже 2 × радиуса,
+     иначе капсула превращается в «почти капсулу» (см. Theme.Radius.bubble). */
+  --bubble-pad-y: var(--space-normal);
+  --bubble-pad-x: var(--space-roomy);
+  --bubble-width-fraction: 90%;
+  --size-message-avatar: var(--size-avatar-small);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -95,6 +101,8 @@
     --row-room: 3.5rem; /* 56 = лицо 40 + 2 × 8 */
     --size-room-avatar: 2.5rem; /* 40 — под мышью строка ниже, лицо тоже */
     --timeline-gutter: var(--space-normal);
+    --bubble-pad-y: var(--space-close);
+    --bubble-pad-x: var(--space-normal);
   }
 }
 

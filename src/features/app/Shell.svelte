@@ -23,6 +23,7 @@
   import RoomList from '../rooms/RoomList.svelte';
   import QuickSwitcher from '../rooms/QuickSwitcher.svelte';
   import { roomName } from '../rooms/text';
+  import RoomView from '../room/RoomView.svelte';
 
   let { session }: { session: UserSession } = $props();
   let confirmingSignOut = $state(false);
@@ -116,6 +117,7 @@
 
   {#snippet main()}
     {#if roomId}
+      <div class="main-column">
       <Bar {title}>
         {#snippet leading()}
           {#if viewport.layout === 'stack'}
@@ -128,6 +130,10 @@
           </IconButton>
         {/snippet}
       </Bar>
+      {#key roomId}
+        <RoomView {session} {roomId} />
+      {/key}
+      </div>
     {:else}
       <EmptyState title={t('room.noRoomSelectedTitle')} message={t('room.noRoomSelectedMessage')} />
     {/if}
@@ -161,6 +167,11 @@
 />
 
 <style>
+  .main-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
   .list-column {
     display: flex;
     flex-direction: column;

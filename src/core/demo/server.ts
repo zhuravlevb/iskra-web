@@ -25,6 +25,9 @@ import {
   type DemoRoom,
 } from './fixtures';
 
+/** Текст, который в демо не уходит с первого раза. */
+export const DEMO_SEND_FAILS_ONCE = 'Сбой отправки';
+
 export type DemoVariant = 'full' | 'password-only' | 'sso-only' | 'slow';
 
 export interface DemoServerOptions {
@@ -72,6 +75,9 @@ export class DemoHomeserver {
   /** Что отдать следующей синхронизацией: вход по приглашению, выход, отметки о прочтении. */
   private pending: Array<Record<string, unknown>> = [];
   private wake: (() => void) | undefined;
+  private readonly sent = new Map<string, string>();
+  private sentCount = 0;
+  private readonly failedOnce = new Set<string>();
 
   constructor(options: DemoServerOptions = {}) {
     this.variant = options.variant ?? 'full';
@@ -106,6 +112,10 @@ export class DemoHomeserver {
       ['POST', re(`${c}/v3/rooms/([^/]+)/leave`), (r) => this.leave(r.params[0]!)],
       ['POST', re(`${c}/v3/rooms/([^/]+)/receipt/([^/]+)/([^/]+)`), (r) => this.receipt(r.params[0]!, r.params[2]!)],
       ['POST', re(`${c}/v3/rooms/([^/]+)/read_markers`), (r) => this.readMarkers(r)],
+      ['PUT', re(`${c}/v3/rooms/([^/]+)/send/([^/]+)/([^/]+)`), (r) => this.send(r)],
+      ['GET', re(`${c}/v3/rooms/([^/]+)/members`), (r) => this.members(r.params[0]!)],
+      ['GET', re(`${c}/v3/rooms/([^/]+)/joined_members`), (r) => this.joinedMembers(r.params[0]!)],
+      ['PUT', re(`${c}/v3/rooms/([^/]+)/typing/([^/]+)`), () => json(200, {})],
       ['GET', re(`${c}/v1/media/config`), () => json(200, { 'm.upload.size': 50 * 1024 * 1024 })],
       ['GET', re(`${c}/v3/voip/turnServer`), () => json(200, {})],
       ['PUT', re(`${c}/v3/presence/([^/]+)/status`), () => json(200, {})],
@@ -435,6 +445,63 @@ export class DemoHomeserver {
     };
     this.enqueue({ kind: 'leave', roomId, body: { state: { events: [] }, timeline: { events: [leaveEvent] } } });
     return json(200, {});
+  }
+
+  /**
+   * Отправка. Событие ложится в историю и приходит обратно следующей синхронизацией с
+   * `transaction_id` — так SDK узнаёт в нём свой local echo.
+   *
+   * Сообщение с текстом `DEMO_SEND_FAILS_ONCE` в первый раз не уходит (403, без повтора
+   * со стороны SDK) — чтобы в демо было на чём увидеть «Не отправлено» и «Отправить заново».
+   */
+  private send({ params, body }: DemoRequest): Response {
+    const [roomId, type, txnId] = params as [string, string, string];
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const content = (body ?? {}) as Record<string, unknown>;
+    if (content['body'] === DEMO_SEND_FAILS_ONCE && !this.failedOnce.has(roomId)) {
+      this.failedOnce.add(roomId);
+      return json(403, { errcode: 'M_FORBIDDEN', error: 'Demo: this message fails the first time' });
+    }
+    const existing = this.sent.get(`${roomId}|${txnId}`);
+    if (existing) return json(200, { event_id: existing });
+    const eventId = `$sent-${++this.sentCount}-${txnId}`;
+    this.sent.set(`${roomId}|${txnId}`, eventId);
+    const event: DemoEvent = {
+      type,
+      sender: demoUsers.alice,
+      content,
+      event_id: eventId,
+      origin_server_ts: Date.now(),
+    };
+    room.timeline.push(event);
+    room.readUpTo = eventId;
+    this.enqueue({
+      kind: 'join',
+      roomId,
+      body: {
+        timeline: { events: [{ ...withDefaults(event), unsigned: { transaction_id: txnId } }], limited: false },
+      },
+    });
+    return json(200, { event_id: eventId });
+  }
+
+  private members(roomId: string): Response {
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    return json(200, { chunk: room.state.filter((e) => e.type === 'm.room.member').map((e) => withDefaults(e)) });
+  }
+
+  private joinedMembers(roomId: string): Response {
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const joined: Record<string, unknown> = {};
+    for (const e of room.state) {
+      if (e.type === 'm.room.member' && e.content['membership'] === 'join') {
+        joined[e.state_key!] = { display_name: e.content['displayname'] };
+      }
+    }
+    return json(200, { joined });
   }
 
   private receipt(roomId: string, eventId: string): Response {
