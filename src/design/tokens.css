@@ -1,0 +1,144 @@
+/*
+ * Токены — `Theme.swift` нативной Искры (zhuravlevb/iskra, ветка dev), переведённый
+ * в CSS custom properties. Числа — оттуда же; здесь они в rem (1rem = 16px), чтобы
+ * `Ctrl +` в браузере увеличивал Искру целиком и честно.
+ *
+ * Всё кратно 4 px (0.25rem). Два исключения — те же, что в Theme.swift, и по той же
+ * причине: `--space-within-run` (2 px) и `--size-recording-dot` (10 px). Сетка — для
+ * того, что выравнивается друг с другом; эти двое не выравниваются ни с чем.
+ *
+ * Ни одного голого `padding: 12px` в компонентах — только эти переменные.
+ *
+ * К числам Theme.swift добавлено то, чего в нативной Искре не было: ширины колонок,
+ * максимальная ширина ленты, зоны нажатия для пальца и для мыши. Точки перелома
+ * (640 и 1100 px) в custom properties жить не могут — media query их не читает, —
+ * поэтому они записаны числами в `breakpoints.ts`.
+ */
+
+:root {
+  /* Theme.Spacing */
+  --space-tight: 0.25rem; /* 4 */
+  --space-close: 0.5rem; /* 8 */
+  --space-normal: 0.75rem; /* 12 */
+  --space-roomy: 1rem; /* 16 */
+  --space-generous: 1.5rem; /* 24 */
+  --space-between-senders: 0.75rem; /* 12 */
+  --space-within-run: 0.125rem; /* 2 — не кратно 4 сознательно, см. Theme.swift */
+
+  /* Theme.Radius */
+  --radius-bubble: 1.5rem; /* 24 */
+  --radius-picture: 1.25rem; /* 20 */
+  --radius-card: 1rem; /* 16 */
+  --radius-control: 0.75rem; /* 12 */
+  --radius-menu: 1.75rem; /* 28 */
+  --radius-circle: 9999px;
+
+  /* Theme.Border */
+  --border-hairline: 1px;
+
+  /* Theme.Backdrop */
+  --backdrop-blur: 24px;
+  --backdrop-wash: 0.12;
+  --backdrop-plate: 0.45;
+  --backdrop-menu-scrim: 0.4;
+
+  /* Theme.Size */
+  --size-avatar: 2.5rem; /* 40 */
+  --size-avatar-small: 1.75rem; /* 28 */
+  --size-avatar-toolbar: 2.25rem; /* 36 */
+  --size-avatar-large: 4rem; /* 64 */
+  --size-avatar-profile: 6rem; /* 96 */
+  --size-room-avatar: 3.5rem; /* 56 */
+  --size-navigation-bar: 2.75rem; /* 44 */
+  --size-sign-in-column: 26.25rem; /* 420 */
+  --size-menu-width: 15rem; /* 240 */
+  --size-recording-dot: 0.625rem; /* 10 — точка, а не сетка */
+
+  /* Колонки. Список чатов — Theme.Size.sidebarMinimum/Ideal/Maximum. */
+  --column-list-min: 17.5rem; /* 280 */
+  --column-list-ideal: 20rem; /* 320 */
+  --column-list-max: 25rem; /* 400 */
+  --column-panel: 22.5rem; /* 360 — правая панель «О чате» */
+  --column-timeline-max: 47.5rem; /* 760 — строку в 200 символов читать нельзя */
+  --column-app-max: 120rem; /* 1920 — дальше поля, а не строки */
+
+  /* Время — Theme.Timing */
+  --timing-chrome: 200ms;
+  --timing-reaction: 250ms;
+  --timing-deletion: 300ms;
+
+  /* Шрифт — системный. Никаких загружаемых шрифтов с чужих CDN. */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell,
+    'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  --font-size-body: 1rem;
+  --font-size-caption: 0.8125rem; /* 13 */
+  --font-size-title: 1.25rem; /* 20 */
+  --font-size-large-title: 1.75rem; /* 28 */
+  --line-height-body: 1.35;
+
+  /*
+   * Плотность — от указателя, а не от ширины. Не две темы, а один набор токенов
+   * с двумя значениями. По умолчанию — палец (так безопаснее для неизвестного ввода).
+   */
+  --tap-target: 3rem; /* 48 — палец */
+  --row-room: 4.5rem; /* 72 */
+  --timeline-gutter: var(--space-roomy);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root {
+    --tap-target: 2.25rem; /* 36 — мышь */
+    --row-room: 3.5rem; /* 56 */
+    --timeline-gutter: var(--space-normal);
+  }
+}
+
+/*
+ * Цвета. Светлая и тёмная тема — от `prefers-color-scheme`, с ручным выбором через
+ * `data-theme` на <html>. Системные цвета Apple, потому что их берёт SwiftUI.
+ */
+:root {
+  color-scheme: light;
+  --color-background: #ffffff;
+  --color-surface: #f2f2f7;
+  --color-text: #000000;
+  --color-text-secondary: rgb(60 60 67 / 0.6);
+  --color-separator: rgb(60 60 67 / 0.29);
+  --color-glass: rgb(255 255 255 / 0.72);
+  --color-glass-opaque: #f9f9f9;
+  /* Color.primary.opacity(0.08) — incomingBubble */
+  --color-incoming-bubble: rgb(0 0 0 / 0.08);
+  --color-own-reaction: rgb(0 0 0 / 0.16);
+  --color-danger: #ff3b30;
+  --color-focus: var(--accent);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-background: #000000;
+  --color-surface: #1c1c1e;
+  --color-text: #ffffff;
+  --color-text-secondary: rgb(235 235 245 / 0.6);
+  --color-separator: rgb(84 84 88 / 0.6);
+  --color-glass: rgb(28 28 30 / 0.72);
+  --color-glass-opaque: #1c1c1e;
+  --color-incoming-bubble: rgb(255 255 255 / 0.08);
+  --color-own-reaction: rgb(255 255 255 / 0.16);
+  --color-danger: #ff453a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-background: #000000;
+    --color-surface: #1c1c1e;
+    --color-text: #ffffff;
+    --color-text-secondary: rgb(235 235 245 / 0.6);
+    --color-separator: rgb(84 84 88 / 0.6);
+    --color-glass: rgb(28 28 30 / 0.72);
+    --color-glass-opaque: #1c1c1e;
+    --color-incoming-bubble: rgb(255 255 255 / 0.08);
+    --color-own-reaction: rgb(255 255 255 / 0.16);
+    --color-danger: #ff453a;
+  }
+}

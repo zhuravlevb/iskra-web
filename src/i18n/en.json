@@ -1,0 +1,18 @@
+{
+  "app.name": "Iskra",
+  "layout.resizeList": "Chat list width",
+  "room.back": "Back",
+  "room.info": "Chat info",
+  "room.infoClose": "Close",
+  "room.noRoomSelectedMessage": "Choose a conversation to start reading.",
+  "room.noRoomSelectedTitle": "Pick a chat",
+  "roomList.emptyMessage": "When someone messages you, it’ll show up here.",
+  "roomList.emptyTitle": "No chats yet",
+  "roomList.title": "Chats",
+  "roomList.unreadChats": {
+    "one": "{count} unread chat",
+    "other": "{count} unread chats"
+  },
+  "update.available": "A new version is available",
+  "update.reload": "Reload"
+}

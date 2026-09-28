@@ -1,0 +1,20 @@
+{
+  "app.name": "Iskra",
+  "layout.resizeList": "Ширина списка чатов",
+  "room.back": "Назад",
+  "room.info": "О чате",
+  "room.infoClose": "Закрыть",
+  "room.noRoomSelectedMessage": "Выберите разговор, чтобы начать читать.",
+  "room.noRoomSelectedTitle": "Выберите чат",
+  "roomList.emptyMessage": "Когда вам напишут, разговор появится здесь.",
+  "roomList.emptyTitle": "Чатов пока нет",
+  "roomList.title": "Чаты",
+  "roomList.unreadChats": {
+    "one": "{count} непрочитанный чат",
+    "few": "{count} непрочитанных чата",
+    "many": "{count} непрочитанных чатов",
+    "other": "{count} непрочитанного чата"
+  },
+  "update.available": "Доступна новая версия",
+  "update.reload": "Обновить"
+}
