@@ -53,7 +53,12 @@ export async function signInToDemo(page: Page): Promise<void> {
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
-  await page.getByRole('button', { name: 'Продолжить' }).click();
+  // Кнопка становится активной после ввода — не раньше, чем Svelte обновит DOM. Нажатие в
+  // этот момент Firefox в CI изредка терял: экран оставался на адресе, без ошибки и без
+  // запросов (так показала диагностика ниже).
+  const continueButton = page.getByRole('button', { name: 'Продолжить' });
+  await expect(continueButton).toBeEnabled();
+  await continueButton.click();
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
   const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });
   const problem = page.getByRole('alert');
