@@ -14,8 +14,8 @@ export type Appearance = 'system' | 'light' | 'dark';
 /** Лица без фото — `FaceMode` нативной Искры; по умолчанию существа, как там. */
 export const faceModes = ['creatures', 'initials', 'creaturesAlways'] as const;
 export type FaceMode = (typeof faceModes)[number];
-/** Шрифт: системный (по умолчанию, как в плане) или Inter из своих файлов. */
-export const fonts = ['system', 'inter'] as const;
+/** Шрифт: Inter из своих файлов (по умолчанию) или системный. */
+export const fonts = ['inter', 'system'] as const;
 export type Font = (typeof fonts)[number];
 
 /** Язык: как в браузере или выбранный вручную (план: «с выбором вручную в настройках»). */
@@ -55,7 +55,7 @@ class Preferences {
   appearance = $state<Appearance>(oneOf(read(keys.appearance), ['system', 'light', 'dark'], 'system'));
   listWidth = $state<number>(clampListWidth(Number(read(keys.listWidth) ?? LIST_IDEAL)));
   faces = $state<FaceMode>(oneOf(read(keys.faces), faceModes, 'creatures'));
-  font = $state<Font>(oneOf(read(keys.font), fonts, 'system'));
+  font = $state<Font>(oneOf(read(keys.font), fonts, 'inter'));
   language = $state<LanguageChoice>(oneOf(read(keys.language), ['system', ...locales], 'system'));
 
   /** Пишет в хранилище и отражает на `<html>` всё, что изменилось. */
@@ -73,7 +73,7 @@ class Preferences {
       $effect(() => {
         const root = document.documentElement;
         root.dataset.accent = this.accent;
-        if (this.font === 'system') delete root.dataset.font;
+        if (this.font === 'inter') delete root.dataset.font;
         else root.dataset.font = this.font;
         if (this.appearance === 'system') delete root.dataset.theme;
         else root.dataset.theme = this.appearance;

@@ -114,12 +114,15 @@ test('настройки: имя, язык, тема, шрифт; устройс
 
   await page.getByRole('radio', { name: 'Тёмное' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  // Inter — из своих файлов под боевой CSP: и кириллица, и латиница действительно загрузились.
-  await page.getByRole('radio', { name: 'Inter' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-font', 'inter');
-  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Inter"?,/);
+  // Inter — по умолчанию и из своих файлов под боевой CSP: кириллица и латиница загрузились.
+  await expect(page.getByRole('radio', { name: 'Inter' })).toHaveAttribute('aria-checked', 'true');
+  const bodyFont = () => page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  expect(await bodyFont()).toMatch(/^"?Inter"?,/);
   expect(await page.evaluate(async () => (await document.fonts.load('1rem Inter', 'Привет, hello')).length)).toBeGreaterThan(1);
   await page.getByRole('radio', { name: 'Системный' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-font', 'system');
+  expect(await bodyFont()).toMatch(/^system-ui,/);
+  await page.getByRole('radio', { name: 'Inter' }).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-font');
 
   await page.getByRole('radio', { name: 'English' }).click();
