@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_ADDRESS, signInToDemo, watchForProblems } from './helpers';
+import { DEMO_ADDRESS, signInToDemo, submitAddress, watchForProblems } from './helpers';
 
 test('экран входа под строгой CSP, без ошибок', async ({ page }) => {
   const problems = watchForProblems(page);
@@ -11,15 +11,13 @@ test('экран входа под строгой CSP, без ошибок', asy
 
 test('непонятный адрес — красная панель, а не тишина', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill('не адрес');
-  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await submitAddress(page, 'не адрес');
   await expect(page.getByRole('alert')).toContainText('По этому адресу мы ничего не нашли');
 });
 
 test('неверный пароль — сказано, и можно попробовать снова', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('textbox', { name: 'Адрес аккаунта' }).fill(DEMO_ADDRESS);
-  await page.getByRole('button', { name: 'Продолжить' }).click();
+  await submitAddress(page, DEMO_ADDRESS);
   await page.getByRole('button', { name: 'У меня только логин и пароль' }).click();
   await page.getByRole('textbox', { name: 'Имя пользователя' }).fill('alice');
   await page.getByLabel('Пароль').fill('wrong');

@@ -59,19 +59,25 @@ export async function signInToDemo(page: Page): Promise<string | null> {
   return code;
 }
 
+/**
+ * Ввести адрес аккаунта и отправить. Enter'ом из поля, а не кликом: клик по активной
+ * «Продолжить» Firefox в CI изредка терял (и на телефоне, и на десктопе) — ни запроса,
+ * ни ошибки, ни «занято». Enter — такой же путь человека и не зависит от координат кнопки.
+ */
+export async function submitAddress(page: Page, address: string): Promise<void> {
+  const field = page.getByRole('textbox', { name: 'Адрес аккаунта' });
+  await field.fill(address);
+  // Кнопка становится активной после ввода — значит, Svelte уже видит адрес.
+  await expect(page.getByRole('button', { name: 'Продолжить' })).toBeEnabled();
+  await field.press('Enter');
+}
+
 /** До нажатия «Войти с паролем» включительно. */
 export async function enterDemoCredentials(page: Page): Promise<void> {
   const log = recordConsole(page);
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  const addressField = page.getByRole('textbox', { name: 'Адрес аккаунта' });
-  await addressField.fill(DEMO_ADDRESS);
-  // Кнопка становится активной после ввода — значит, Svelte уже видит адрес.
-  await expect(page.getByRole('button', { name: 'Продолжить' })).toBeEnabled();
-  // Отправляем Enter'ом из поля, а не кликом: клик по «Продолжить» Firefox в CI изредка
-  // терял на телефонной раскладке — ни запроса, ни ошибки, ни «занято» (так показала
-  // диагностика ниже). Enter — такой же путь человека и не зависит от координат кнопки.
-  await addressField.press('Enter');
+  await submitAddress(page, DEMO_ADDRESS);
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
   const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });
   const problem = page.getByRole('alert');
