@@ -28,8 +28,8 @@ export function watchForProblems(page: Page): string[] {
 const consoles = new WeakMap<Page, string[]>();
 /** Запросы, которые начались и не закончились, — кто держит страницу недогруженной. */
 const pending = new WeakMap<Page, Set<string>>();
-/** Сколько запросов страница вообще начала. */
-const started = new WeakMap<Page, number>();
+/** Все запросы страницы с исходом — чтобы видеть, дошёл ли документ. */
+const requests = new WeakMap<Page, string[]>();
 function recordConsole(page: Page): string[] {
   let lines = consoles.get(page);
   if (!lines) {
@@ -42,11 +42,13 @@ function recordConsole(page: Page): string[] {
     page.on('requestfailed', (r) => record.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText ?? ''}`));
     const open = new Set<string>();
     pending.set(page, open);
-    page.on('request', (r) => {
-      open.add(r.url());
-      started.set(page, (started.get(page) ?? 0) + 1);
+    const seen: string[] = [];
+    requests.set(page, seen);
+    page.on('request', (r) => open.add(r.url()));
+    page.on('requestfinished', (r) => {
+      open.delete(r.url());
+      void r.response().then((response) => seen.push(`${response?.status() ?? '—'} ${r.url()}`));
     });
-    page.on('requestfinished', (r) => open.delete(r.url()));
     page.on('requestfailed', (r) => open.delete(r.url()));
   }
   return lines;
@@ -90,18 +92,21 @@ export async function enterDemoCredentials(page: Page): Promise<void> {
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 10_000 });
     } catch (error) {
-      // Firefox под Playwright изредка не начинает переход вовсе: ни одного запроса, ни
-      // перехода, ни строки в консоли — до нашего кода дело не дошло. Тогда — ещё раз;
-      // если запросы были, это уже наша страница, и повтор ничего не скроет.
-      if (started.get(page)) throw error;
-      log.push('[retry] переход не начался — ещё раз');
+      // Firefox под Playwright изредка теряет сам переход: документ запрошен и получен, а
+      // страница так и не переключилась на него — ни `framenavigated`, ни строки нашего
+      // кода. Это переход из about:blank в страницу с COOP `same-origin`: Firefox уводит её
+      // в новую группу контекстов (процесс), и Juggler иногда теряет эту смену. Наш код
+      // до этого не исполняется, так что — ещё раз. Если переход состоялся, а
+      // DOMContentLoaded не пришёл, — это уже наше, и повтора нет.
+      if (log.some((line) => line.startsWith('[navigated] http'))) throw error;
+      log.push(`[retry] переход не состоялся; запросы: ${(requests.get(page) ?? []).join(', ') || '—'}`);
       await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 20_000 });
     }
   } catch (error) {
     // Firefox в CI однажды не дождался и DOMContentLoaded. Он приходит после того, как
     // исполнены модули бандла, — значит, какой-то из них не пришёл. Какой — скажет ошибка.
     throw new Error(
-      `Страница не загрузилась.\nНе закончились: ${[...(pending.get(page) ?? [])].join(', ') || '—'}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
+      `Страница не загрузилась.\nНе закончились: ${[...(pending.get(page) ?? [])].join(', ') || '—'}\nЗакончились: ${(requests.get(page) ?? []).slice(-10).join(', ') || '—'}\nКонсоль и переходы:\n${log.slice(-30).join('\n')}`,
       { cause: error },
     );
   }
