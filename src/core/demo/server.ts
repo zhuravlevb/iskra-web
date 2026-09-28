@@ -19,12 +19,16 @@ import {
   demoDirect,
   demoMutedRooms,
   demoProfiles,
+  demoRooms,
   demoUsers,
   DEMO_BASE_URL,
   type DemoEvent,
   type DemoInvite,
   type DemoRoom,
 } from './fixtures';
+
+/** Сколько Вера «печатает» в ответ на сообщение в «Выходных». */
+export const DEMO_TYPING_MS = 2_500;
 
 /** Текст, который в демо не уходит с первого раза. */
 export const DEMO_SEND_FAILS_ONCE = 'Сбой отправки';
@@ -121,6 +125,9 @@ export class DemoHomeserver {
       ['POST', re(`${c}/v3/rooms/([^/]+)/receipt/([^/]+)/([^/]+)`), (r) => this.receipt(r.params[0]!, r.params[2]!)],
       ['POST', re(`${c}/v3/rooms/([^/]+)/read_markers`), (r) => this.readMarkers(r)],
       ['PUT', re(`${c}/v3/rooms/([^/]+)/send/([^/]+)/([^/]+)`), (r) => this.send(r)],
+      ['PUT', re(`${c}/v3/rooms/([^/]+)/redact/([^/]+)/([^/]+)`), (r) => this.redact(r)],
+      ['PUT', re(`${c}/v3/rooms/([^/]+)/state/([^/]+)/?([^/]*)`), (r) => this.putState(r)],
+      ['GET', re(`${c}/v3/rooms/([^/]+)/event/([^/]+)`), (r) => this.event(r)],
       ['GET', re(`${c}/v3/rooms/([^/]+)/members`), (r) => this.members(r.params[0]!)],
       ['GET', re(`${c}/v3/rooms/([^/]+)/joined_members`), (r) => this.joinedMembers(r.params[0]!)],
       ['PUT', re(`${c}/v3/rooms/([^/]+)/typing/([^/]+)`), () => json(200, {})],
@@ -633,16 +640,84 @@ export class DemoHomeserver {
       event_id: eventId,
       origin_server_ts: Date.now(),
     };
+    this.append(roomId, event, txnId);
+    if (type === 'm.room.message' && roomId === demoRooms.weekend) this.veraTypes(roomId);
+    return json(200, { event_id: eventId });
+  }
+
+  /** Событие Алисы — в историю и в следующую синхронизацию, с её `transaction_id`. */
+  private append(roomId: string, event: DemoEvent, txnId?: string): void {
+    const room = this.rooms.get(roomId)!;
     room.timeline.push(event);
-    room.readUpTo = eventId;
-    this.enqueue({
-      kind: 'join',
-      roomId,
-      body: {
-        timeline: { events: [{ ...withDefaults(event), unsigned: { transaction_id: txnId } }], limited: false },
-      },
+    if (event.state_key !== undefined) {
+      room.state = [...room.state.filter((e) => !(e.type === event.type && e.state_key === event.state_key)), event];
+    }
+    room.readUpTo = event.event_id;
+    const echoed = txnId ? { ...withDefaults(event), unsigned: { transaction_id: txnId } } : withDefaults(event);
+    this.enqueue({ kind: 'join', roomId, body: { timeline: { events: [echoed], limited: false } } });
+  }
+
+  /**
+   * В «Выходных» на сообщение Алисы Вера начинает печатать — и через пару секунд
+   * перестаёт: так в демо видно «Вера печатает…».
+   */
+  private veraTypes(roomId: string): void {
+    const typing = (userIds: string[]) =>
+      this.enqueue({ kind: 'join', roomId, body: { ephemeral: { events: [{ type: 'm.typing', content: { user_ids: userIds } }] } } });
+    typing([demoUsers.vera]);
+    setTimeout(() => typing([]), DEMO_TYPING_MS);
+  }
+
+  /** Удаление: событие теряет содержимое у всех, в ленту приходит `m.room.redaction`. */
+  private redact({ params, body }: DemoRequest): Response {
+    const [roomId, target, txnId] = params as [string, string, string];
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const existing = this.sent.get(`${roomId}|${txnId}`);
+    if (existing) return json(200, { event_id: existing });
+    const eventId = `$redaction-${++this.sentCount}-${txnId}`;
+    this.sent.set(`${roomId}|${txnId}`, eventId);
+    const reason = (body as { reason?: string } | undefined)?.reason;
+    const redaction: DemoEvent = {
+      type: 'm.room.redaction',
+      sender: demoUsers.alice,
+      content: { redacts: target, ...(reason ? { reason } : {}) },
+      redacts: target,
+      event_id: eventId,
+      origin_server_ts: Date.now(),
+    };
+    // В истории — уже удалённым: подгруженное позже тоже должно быть пустым.
+    room.timeline = room.timeline.map((e) =>
+      e.event_id === target ? { ...e, content: {}, unsigned: { ...e.unsigned, redacted_because: withDefaults(redaction) } } : e,
+    );
+    this.append(roomId, redaction, txnId);
+    return json(200, { event_id: eventId });
+  }
+
+  /** Состояние комнаты — в демо это закреплённые сообщения. */
+  private putState({ params, body }: DemoRequest): Response {
+    const [roomId, type, stateKey = ''] = params as [string, string, string?];
+    const room = this.rooms.get(roomId);
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const eventId = `$state-${++this.sentCount}`;
+    this.append(roomId, {
+      type: decodeURIComponent(type),
+      sender: demoUsers.alice,
+      state_key: decodeURIComponent(stateKey),
+      content: (body ?? {}) as Record<string, unknown>,
+      event_id: eventId,
+      origin_server_ts: Date.now(),
     });
     return json(200, { event_id: eventId });
+  }
+
+  /** Одно событие по ID — закреплённое, которого нет среди загруженного. */
+  private event({ params }: DemoRequest): Response {
+    const room = this.rooms.get(params[0] ?? '');
+    if (!room) return json(403, { errcode: 'M_FORBIDDEN', error: 'Not in room' });
+    const id = decodeURIComponent(params[1] ?? '');
+    const found = room.timeline.find((e) => e.event_id === id);
+    return found ? json(200, { ...withDefaults(found), room_id: room.roomId }) : json(404, { errcode: 'M_NOT_FOUND', error: 'Event not found' });
   }
 
   private members(roomId: string): Response {

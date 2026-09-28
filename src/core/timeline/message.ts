@@ -17,12 +17,12 @@ export interface Attachment {
   encrypted?: boolean;
 }
 
+/**
+ * Служебная строка. Про людей — список, а не одно имя: подряд идущие «вошла Аня», «вошёл
+ * Борис» склеиваются в одну строку (`layout.ts`), как в нативной Искре.
+ */
 export type ServiceEvent =
-  | { type: 'joined'; who: string }
-  | { type: 'left'; who: string }
-  | { type: 'invited'; who: string }
-  | { type: 'removed'; who: string }
-  | { type: 'banned'; who: string }
+  | { type: 'joined' | 'left' | 'invited' | 'removed' | 'banned'; people: string[] }
   | { type: 'renamedThemselves'; from: string; to: string }
   | { type: 'roomRenamed'; name: string }
   | { type: 'roomTopicChanged' }
@@ -30,13 +30,35 @@ export type ServiceEvent =
   | { type: 'roomCreated' }
   | { type: 'encryptionEnabled' };
 
+export interface PollAnswer {
+  id: string;
+  text: string;
+  votes: number;
+}
+
+export interface Poll {
+  question: string;
+  answers: PollAnswer[];
+  /** Сколько человек проголосовало (не голосов: при нескольких ответах их больше). */
+  voters: number;
+  /** Мой выбор — ID ответов; пусто — не голосовал. */
+  mine: string[];
+  maxSelections: number;
+  /** Итоги скрыты до конца опроса (`undisclosed`). */
+  undisclosed: boolean;
+  ended: boolean;
+  /** Пространство имён опроса — ответ уходит в том же, в каком опрос пришёл. */
+  stable: boolean;
+}
+
 export type MessageKind =
-  | { type: 'text'; body: string }
-  | { type: 'emote'; body: string }
-  | { type: 'notice'; body: string }
+  /** `html` — `formatted_body`, как пришёл: чистит его экран (DOMPurify), не ядро. */
+  | { type: 'text'; body: string; html?: string }
+  | { type: 'emote'; body: string; html?: string }
+  | { type: 'notice'; body: string; html?: string }
   | { type: 'image' | 'sticker' | 'video' | 'videoNote' | 'voice' | 'audio' | 'file'; attachment: Attachment }
   | { type: 'location'; body: string; uri: string }
-  | { type: 'poll'; question: string; answers: string[] }
+  | { type: 'poll'; poll: Poll }
   | { type: 'service'; event: ServiceEvent }
   | { type: 'deleted' }
   | { type: 'unreadable' }
@@ -74,6 +96,11 @@ export interface Message {
   edited: boolean;
   replyTo?: ReplyPreview;
   reactions: Reaction[];
+  pinned: boolean;
+  /** Своё текстовое, ушедшее, не удалённое. */
+  canEdit: boolean;
+  /** Своё — или право модератора удалять чужое. */
+  canDelete: boolean;
 }
 
 export const isService = (m: Message): boolean => m.kind.type === 'service';

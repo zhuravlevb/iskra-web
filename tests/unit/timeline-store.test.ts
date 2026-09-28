@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { ClientEvent, createClient, PendingEventOrdering, SyncState, type MatrixClient } from 'matrix-js-sdk';
-import { DemoHomeserver, DEMO_SEND_FAILS_ONCE } from '../../src/core/demo/server';
+import { DemoHomeserver, DEMO_SEND_FAILS_ONCE, DEMO_TYPING_MS, type DemoServerOptions } from '../../src/core/demo/server';
 import { demoRooms, demoUsers } from '../../src/core/demo/fixtures';
 import { TimelineStore } from '../../src/core/timeline/timelineStore.svelte.ts';
 import { quietLogger } from '../../src/core/support/logger';
@@ -18,8 +18,8 @@ afterEach(async () => {
   client = store = undefined;
 });
 
-async function started(): Promise<{ client: MatrixClient; server: DemoHomeserver }> {
-  const server = new DemoHomeserver();
+async function started(options?: DemoServerOptions): Promise<{ client: MatrixClient; server: DemoHomeserver }> {
+  const server = new DemoHomeserver(options);
   client = createClient({
     baseUrl: server.baseUrl,
     fetchFn: server.fetch,
@@ -136,5 +136,118 @@ describe('TimelineStore на демо-сервере', () => {
     expect(edited.edited).toBe(true);
     const reply = store.messages.find((m) => m.replyTo)!;
     expect(reply.replyTo).toMatchObject({ senderName: 'Аня', text: 'Хотим за город, на озеро. Поедешь?' });
+  });
+
+  const find = (s: TimelineStore, body: string) => s.messages.find((m) => 'body' in m.kind && m.kind.body === body);
+
+  it('ответ: связь с оригиналом и упоминание автора; цитата — у ответа', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    const question = find(store, 'Кто что берёт на пикник?')!;
+    store.send('Я — мангал', question);
+    await until(() => !!find(store!, 'Я — мангал')?.eventId);
+    const reply = find(store, 'Я — мангал')!;
+    expect(reply.replyTo).toMatchObject({ eventId: question.eventId, senderName: 'Борис', text: 'Кто что берёт на пикник?' });
+    const event = client.getRoom(demoRooms.weekend)!.findEventById(reply.eventId!)!;
+    expect(event.getContent()['m.mentions']).toEqual({ user_ids: [question.senderId] });
+  });
+
+  it('правка: текст меняется, пометка «изменено», строка та же; ↑ находит последнее своё', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    store.send('Буду в 10');
+    await until(() => find(store!, 'Буду в 10')?.canEdit === true);
+    const mine = find(store, 'Буду в 10')!;
+    expect(store.lastEditable()?.key).toBe(mine.key);
+    store.edit(mine, 'Буду в 11');
+    await until(() => !!find(store!, 'Буду в 11')?.edited);
+    expect(find(store, 'Буду в 11')!.key).toBe(mine.key);
+    expect(find(store, 'Буду в 10')).toBeUndefined();
+    // Чужое не правится.
+    store.edit(find(store, 'Я — пирог')!, 'взлом');
+    expect(find(store, 'взлом')).toBeUndefined();
+  });
+
+  it('реакция: поставить, снять повторным нажатием', async () => {
+    const { client, server } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    const pie = () => find(store!, 'Я — пирог')!;
+    store.react(pie(), '❤️');
+    await until(() => pie().reactions.some((r) => r.key === '❤️' && r.mine));
+    // Дождаться, пока реакция уйдёт: снимают уже её, а не local echo.
+    await until(() => {
+      const room = client.getRoom(demoRooms.weekend)!;
+      const reaction = room.relations.getChildEventsForEvent(pie().eventId!, 'm.annotation', 'm.reaction')?.getRelations()[0];
+      return !!reaction && !reaction.status;
+    });
+    store.react(pie(), '❤️');
+    await until(() => pie().reactions.length === 0);
+    expect(server.unknown).toEqual([]);
+  });
+
+  it('удаление своего — «сообщение удалено»; чужое без прав — нельзя', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    expect(find(store, 'Я — пирог')!.canDelete).toBe(false);
+    store.send('Ошибся чатом');
+    await until(() => find(store!, 'Ошибся чатом')?.canDelete === true);
+    const key = find(store, 'Ошибся чатом')!.key;
+    store.remove(find(store, 'Ошибся чатом')!);
+    await until(() => store!.messages.find((m) => m.key === key)?.kind.type === 'deleted');
+    expect(store.failure).toBeNull();
+  });
+
+  it('закреп: видно чужое закреплённое; своё — закрепить и открепить, где есть права', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    expect(store.canPin).toBe(false);
+    expect(store.pinnedMessage).toMatchObject({ kind: { body: 'Кто что берёт на пикник?' }, pinned: true });
+    store.destroy();
+
+    store = new TimelineStore(client, demoRooms.history);
+    expect(store.canPin).toBe(true);
+    const last = store.messages.at(-1)!;
+    store.pin(last);
+    await until(() => store!.pinnedMessage?.key === last.key && store!.messages.at(-1)!.pinned);
+    store.unpin(store.messages.at(-1)!);
+    await until(() => store!.pinnedIds.length === 0 && !store!.pinnedMessage);
+  });
+
+  it('закреплённое, которого нет среди загруженного, достаётся одним запросом; переход — листает', async () => {
+    const { client } = await started({ initialTimelineLimit: 2 });
+    store = new TimelineStore(client, demoRooms.weekend);
+    expect(find(store, 'Кто что берёт на пикник?')).toBeUndefined();
+    await until(() => store!.pinnedMessage?.kind.type === 'text');
+    expect(store.pinnedMessage).toMatchObject({ kind: { body: 'Кто что берёт на пикник?' } });
+    expect(await store.reveal(store.pinnedMessage!.eventId!)).toBe(true);
+    expect(find(store, 'Кто что берёт на пикник?')).toBeDefined();
+  });
+
+  it('опрос: голос Веры уже есть; мой — добавляется, передумала — переносится', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    const poll = () => store!.messages.find((m) => m.kind.type === 'poll')!;
+    const counts = () => (poll().kind.type === 'poll' ? Object.fromEntries((poll().kind as { poll: { answers: { id: string; votes: number }[] } }).poll.answers.map((a) => [a.id, a.votes])) : {});
+    expect(counts()).toEqual({ lake: 1, forest: 0, home: 0 });
+    store.vote(poll(), ['forest']);
+    await until(() => counts()['forest'] === 1);
+    expect(poll().kind).toMatchObject({ poll: { mine: ['forest'], voters: 2 } });
+    store.vote(poll(), ['lake']);
+    await until(() => counts()['lake'] === 2 && counts()['forest'] === 0);
+  });
+
+  it('«печатает…»: Вера отвечает на сообщение в «Выходных» и затихает', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    store.send('Кто за рулём?');
+    await until(() => store!.typing.includes('Вера'));
+    await until(() => store!.typing.length === 0, DEMO_TYPING_MS + 8000);
+  }, 20_000);
+
+  it('служебные подряд склеены: «Борис и Вера теперь в чате»', async () => {
+    const { client } = await started();
+    store = new TimelineStore(client, demoRooms.weekend);
+    const service = store.items.find((i) => i.kind === 'message' && i.message.kind.type === 'service');
+    expect(service).toMatchObject({ message: { kind: { event: { type: 'joined', people: ['Борис', 'Вера'] } } } });
   });
 });

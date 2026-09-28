@@ -29,7 +29,7 @@ import { SecretStorageKeyHolder } from '../encryption/secretStorageKey';
 import { VerificationStore } from '../encryption/verification.svelte.ts';
 import { deleteDatabase } from '../storage/idb';
 import { fromBase64 } from '../storage/secretBox';
-import type { Account, AccountSecrets } from '../storage/vault';
+import { vault, type Account, type AccountSecrets } from '../storage/vault';
 import { quietLogger } from '../support/logger';
 
 export type Connection = 'connecting' | 'online' | 'offline';
@@ -95,6 +95,16 @@ export class UserSession {
   /** Лента комнаты. Живёт, пока открыт чат: тот, кто открыл, её и `destroy()`. */
   timeline(roomId: string): TimelineStore {
     return new TimelineStore(this.client, roomId);
+  }
+
+  /** Черновик чата — под ключом аккаунта (`vault`). Не прочитался — пусто, а не ошибка. */
+  async draft(roomId: string): Promise<string> {
+    return vault.draft(this.userId, roomId).catch(() => '');
+  }
+
+  /** Пустой — стереть. Не записался — не повод мешать человеку печатать. */
+  async saveDraft(roomId: string, text: string): Promise<void> {
+    await vault.saveDraft(this.userId, roomId, text).catch(() => {});
   }
 
   /** Можно ли писать в комнату: вошли, а не только приглашены. */

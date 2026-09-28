@@ -63,4 +63,35 @@ describe('хранилище аккаунтов', () => {
     expect((await vault.current())?.userId).toBe(alice.userId);
     expect(await vault.secrets('@bob:example.org')).toBeUndefined();
   });
+
+  it('черновики: по чату, под ключом аккаунта, пустой — удаляется, уходят вместе с аккаунтом', async () => {
+    const bob = { ...alice, userId: '@bob:example.org' };
+    await vault.add(alice);
+    await vault.add(bob);
+    await vault.saveDraft(alice.userId, '!a:x', 'Привет, это черновик');
+    await vault.saveDraft(alice.userId, '!b:x', 'Второй');
+    await vault.saveDraft(bob.userId, '!a:x', 'Чужой');
+    expect(await vault.draft(alice.userId, '!a:x')).toBe('Привет, это черновик');
+    expect(await vault.draft(alice.userId, '!c:x')).toBe('');
+
+    // На диске — не текст.
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open('iskra-accounts');
+      r.onsuccess = () => resolve(r.result);
+    });
+    const raw = await new Promise<{ sealed: { data: ArrayBuffer } }>((resolve) => {
+      const r = db.transaction('drafts').objectStore('drafts').get([alice.userId, '!a:x']);
+      r.onsuccess = () => resolve(r.result);
+    });
+    db.close();
+    expect(raw.sealed.data.byteLength).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(raw.sealed.data)).not.toContain('черновик');
+
+    await vault.saveDraft(alice.userId, '!b:x', '   ');
+    expect(await vault.draft(alice.userId, '!b:x')).toBe('');
+
+    await vault.remove(alice.userId);
+    expect(await vault.draft(alice.userId, '!a:x')).toBe('');
+    expect(await vault.draft(bob.userId, '!a:x')).toBe('Чужой');
+  });
 });

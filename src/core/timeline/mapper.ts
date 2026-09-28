@@ -8,7 +8,7 @@
  */
 import { EventStatus, EventType, MsgType, type MatrixEvent } from 'matrix-js-sdk';
 import { isVideoNote } from '../rooms/preview';
-import type { Attachment, Delivery, Message, MessageKind, Reaction, ReplyPreview, SendFailure, ServiceEvent } from './message';
+import type { Attachment, Delivery, Message, MessageKind, Poll, Reaction, ReplyPreview, SendFailure, ServiceEvent } from './message';
 
 export interface MapperContext {
   ownUserId: string;
@@ -19,9 +19,17 @@ export interface MapperContext {
   reactionsOf: (eventId: string) => Reaction[];
   /** Стабильный ключ строки для события. */
   keyOf: (event: MatrixEvent) => string;
+  /** Связанные события: ответы и конец опроса (`m.reference`). */
+  relationsOf: (eventId: string, relType: string, eventTypes: readonly string[]) => MatrixEvent[];
+  isPinned: (eventId: string) => boolean;
+  /** Может ли этот человек удалить *чужое* событие — право модератора. */
+  canRedactOthers: (event: MatrixEvent) => boolean;
 }
 
 const POLL_START = new Set(['m.poll.start', 'org.matrix.msc3381.poll.start']);
+export const POLL_RESPONSE = ['m.poll.response', 'org.matrix.msc3381.poll.response'] as const;
+export const POLL_END = ['m.poll.end', 'org.matrix.msc3381.poll.end'] as const;
+const HTML_FORMAT = 'org.matrix.custom.html';
 
 export function mapEvent(event: MatrixEvent, context: MapperContext): Message | undefined {
   if (event.status === EventStatus.CANCELLED) return undefined;
@@ -29,21 +37,28 @@ export function mapEvent(event: MatrixEvent, context: MapperContext): Message | 
   if (!kind) return undefined;
 
   const senderId = event.getSender() ?? '';
-  const eventId = event.getId();
+  const rawId = event.getId();
+  const eventId = rawId && !rawId.startsWith('~') ? rawId : undefined;
   const replyTo = kind.type === 'deleted' ? undefined : replyOf(event, context);
+  const own = senderId === context.ownUserId;
+  const delivery = deliveryOf(event);
+  const live = kind.type !== 'deleted' && kind.type !== 'service';
   return {
     key: context.keyOf(event),
-    ...(eventId && !eventId.startsWith('~') ? { eventId } : {}),
+    ...(eventId ? { eventId } : {}),
     kind,
     senderId,
     senderName: context.nameOf(senderId),
     ...(context.avatarOf(senderId) ? { senderAvatarUrl: context.avatarOf(senderId)! } : {}),
-    own: senderId === context.ownUserId,
+    own,
     ts: event.getTs(),
-    delivery: deliveryOf(event),
+    delivery,
     edited: !!event.replacingEvent() && !event.isRedacted(),
     ...(replyTo ? { replyTo } : {}),
-    reactions: eventId && kind.type !== 'deleted' && kind.type !== 'service' ? context.reactionsOf(eventId) : [],
+    reactions: eventId && live ? context.reactionsOf(eventId) : [],
+    pinned: !!eventId && live && context.isPinned(eventId),
+    canEdit: own && !!eventId && delivery.state === 'sent' && (kind.type === 'text' || kind.type === 'emote' || kind.type === 'notice'),
+    canDelete: !!eventId && live && (own || context.canRedactOthers(event)),
   };
 }
 
@@ -63,7 +78,7 @@ function kindOf(event: MatrixEvent, context: MapperContext): MessageKind | undef
 
   if (type === EventType.RoomMessage) return messageKind(event);
   if (type === EventType.Sticker) return { type: 'sticker', attachment: attachmentOf(event.getContent()) };
-  if (POLL_START.has(type)) return pollKind(event);
+  if (POLL_START.has(type)) return { type: 'poll', poll: pollOf(event, context) };
   if (event.isState()) {
     const service = serviceEvent(event, context);
     return service ? { type: 'service', event: service } : undefined;
@@ -81,13 +96,15 @@ function messageKind(event: MatrixEvent): MessageKind {
   const body = typeof content['body'] === 'string' ? content['body'] : '';
   const isReply = !!content['m.relates_to']?.['m.in_reply_to'];
   const text = isReply ? stripReplyFallback(body) : body;
+  const html = content['format'] === HTML_FORMAT && typeof content['formatted_body'] === 'string' ? content['formatted_body'] : undefined;
+  const withHtml = html ? { html } : {};
   switch (content['msgtype']) {
     case MsgType.Text:
-      return { type: 'text', body: text };
+      return { type: 'text', body: text, ...withHtml };
     case MsgType.Emote:
-      return { type: 'emote', body: text };
+      return { type: 'emote', body: text, ...withHtml };
     case MsgType.Notice:
-      return { type: 'notice', body: text };
+      return { type: 'notice', body: text, ...withHtml };
     case MsgType.Image:
       return { type: 'image', attachment: attachmentOf(content) };
     case MsgType.Video: {
@@ -124,8 +141,13 @@ function attachmentOf(content: Record<string, unknown>): Attachment {
   return attachment;
 }
 
-function pollKind(event: MatrixEvent): MessageKind {
+/**
+ * Опрос — вопрос, ответы и итог. Голос каждого — его *последний* ответ до конца опроса;
+ * пустой выбор — голос отозван. Конец опроса признаётся только от его автора.
+ */
+function pollOf(event: MatrixEvent, context: MapperContext): Poll {
   const content = event.getContent();
+  const stable = event.getType() === 'm.poll.start';
   const poll = (content['m.poll'] ?? content['org.matrix.msc3381.poll.start']) as Record<string, unknown> | undefined;
   const textOf = (value: unknown): string => {
     if (typeof value === 'string') return value;
@@ -135,8 +157,40 @@ function pollKind(event: MatrixEvent): MessageKind {
     if (Array.isArray(list)) return String((list[0] as { body?: unknown })?.body ?? '');
     return '';
   };
-  const answers = Array.isArray(poll?.['answers']) ? (poll['answers'] as unknown[]).map(textOf) : [];
-  return { type: 'poll', question: textOf(poll?.['question']), answers };
+  const answers = (Array.isArray(poll?.['answers']) ? (poll['answers'] as Array<Record<string, unknown>>) : []).map((answer, index) => ({
+    id: String(answer['m.id'] ?? answer['id'] ?? index),
+    text: textOf(answer),
+    votes: 0,
+  }));
+  const max = poll?.['max_selections'];
+  const maxSelections = typeof max === 'number' && max >= 1 ? Math.floor(max) : 1;
+  const undisclosed = String(poll?.['kind'] ?? '').endsWith('undisclosed');
+
+  const id = event.getId();
+  const author = event.getSender();
+  const ends = id ? context.relationsOf(id, 'm.reference', POLL_END).filter((e) => !e.isRedacted() && e.getSender() === author) : [];
+  const endedAt = ends.length ? Math.min(...ends.map((e) => e.getTs())) : Infinity;
+
+  const latest = new Map<string, MatrixEvent>();
+  for (const response of id ? context.relationsOf(id, 'm.reference', POLL_RESPONSE) : []) {
+    const sender = response.getSender();
+    if (!sender || response.isRedacted() || response.getTs() > endedAt) continue;
+    const previous = latest.get(sender);
+    if (!previous || previous.getTs() <= response.getTs()) latest.set(sender, response);
+  }
+  const known = new Set(answers.map((a) => a.id));
+  let voters = 0;
+  let mine: string[] = [];
+  for (const [sender, response] of latest) {
+    const c = response.getContent();
+    const raw = (c['m.selections'] ?? (c['org.matrix.msc3381.poll.response'] as { answers?: unknown } | undefined)?.answers) as unknown;
+    const chosen = (Array.isArray(raw) ? raw.map(String) : []).filter((a) => known.has(a)).slice(0, maxSelections);
+    if (sender === context.ownUserId) mine = chosen;
+    if (chosen.length === 0) continue;
+    voters++;
+    for (const answer of answers) if (chosen.includes(answer.id)) answer.votes++;
+  }
+  return { question: textOf(poll?.['question']), answers, voters, mine, maxSelections, undisclosed, ended: ends.length > 0, stable };
 }
 
 function serviceEvent(event: MatrixEvent, context: MapperContext): ServiceEvent | undefined {
@@ -146,6 +200,7 @@ function serviceEvent(event: MatrixEvent, context: MapperContext): ServiceEvent 
     case EventType.RoomMember: {
       const target = event.getStateKey() ?? '';
       const name = (typeof content['displayname'] === 'string' && content['displayname']) || context.nameOf(target);
+      const people = [name];
       const was = prev['membership'];
       switch (content['membership']) {
         case 'join':
@@ -154,14 +209,14 @@ function serviceEvent(event: MatrixEvent, context: MapperContext): ServiceEvent 
             // Сменили аватар, а не имя, — не повод для строки в ленте.
             return from && from !== name ? { type: 'renamedThemselves', from, to: name } : undefined;
           }
-          return { type: 'joined', who: name };
+          return { type: 'joined', people };
         case 'invite':
-          return { type: 'invited', who: name };
+          return { type: 'invited', people };
         case 'leave':
           if (was === 'invite' && event.getSender() === target) return undefined; // отказался от приглашения
-          return event.getSender() === target ? { type: 'left', who: name } : { type: 'removed', who: name };
+          return event.getSender() === target ? { type: 'left', people } : { type: 'removed', people };
         case 'ban':
-          return { type: 'banned', who: name };
+          return { type: 'banned', people };
         default:
           return undefined;
       }

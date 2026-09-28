@@ -5,14 +5,16 @@
  * Access token, refresh token и ключ криптохранилища — под `seal`, неизвлекаемым ключом
  * этого же аккаунта. Ключ — свой у каждого аккаунта и удаляется вместе с ним.
  *
- * Черновики (этап 6) лягут сюда же, под тот же ключ: черновик — это текст сообщения.
+ * Черновики — здесь же, под тем же ключом: черновик — это текст сообщения, и лежать на
+ * диске открытым ему не положено больше, чем токену. Уходят вместе с аккаунтом.
  */
 import { deleteDatabase, openDatabase, transact } from './idb';
 import { createSealingKey, randomBase64, seal, unseal, type Sealed } from './secretBox';
 
 const DB_NAME = 'iskra-accounts';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const ACCOUNTS = 'accounts';
+const DRAFTS = 'drafts';
 
 export type SignInMethod = 'password' | 'sso' | 'oauth' | 'demo';
 
@@ -40,6 +42,15 @@ export interface Account {
   signedInAt: number;
 }
 
+interface StoredDraft {
+  userId: string;
+  roomId: string;
+  sealed: Sealed;
+}
+
+/** Все черновики одного аккаунта — диапазон составного ключа `[userId, roomId]`. */
+const draftsOf = (userId: string) => IDBKeyRange.bound([userId, ''], [userId, '\uffff']);
+
 interface StoredAccount extends Account {
   key: CryptoKey;
   sealed: Sealed;
@@ -50,6 +61,7 @@ export type NewAccount = Omit<Account, 'signedInAt'> & Omit<AccountSecrets, 'cry
 function open(): Promise<IDBDatabase> {
   return openDatabase(DB_NAME, DB_VERSION, (db) => {
     if (!db.objectStoreNames.contains(ACCOUNTS)) db.createObjectStore(ACCOUNTS, { keyPath: 'userId' });
+    if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS, { keyPath: ['userId', 'roomId'] });
   });
 }
 
@@ -110,7 +122,38 @@ export const vault = {
   },
 
   async remove(userId: string): Promise<void> {
-    await withDb((db) => transact(db, ACCOUNTS, 'readwrite', (s) => s.delete(userId)));
+    await withDb(async (db) => {
+      await transact(db, DRAFTS, 'readwrite', (s) => s.delete(draftsOf(userId)));
+      await transact(db, ACCOUNTS, 'readwrite', (s) => s.delete(userId));
+    });
+  },
+
+  /** Черновик чата — или пусто. Не расшифровался (ключ сменился) — считаем, что его нет. */
+  async draft(userId: string, roomId: string): Promise<string> {
+    return withDb(async (db) => {
+      const [account, draft] = await Promise.all([
+        transact(db, ACCOUNTS, 'readonly', (s) => s.get(userId) as IDBRequest<StoredAccount | undefined>),
+        transact(db, DRAFTS, 'readonly', (s) => s.get([userId, roomId]) as IDBRequest<StoredDraft | undefined>),
+      ]);
+      if (!account || !draft) return '';
+      return unseal<string>(account.key, draft.sealed).catch(() => '');
+    });
+  },
+
+  /** Пустой текст — черновика нет: запись удаляется, а не хранит пустоту. */
+  async saveDraft(userId: string, roomId: string, text: string): Promise<void> {
+    await withDb(async (db) => {
+      if (!text.trim()) {
+        await transact(db, DRAFTS, 'readwrite', (s) => s.delete([userId, roomId]));
+        return;
+      }
+      const account = await transact(db, ACCOUNTS, 'readonly', (s) => s.get(userId) as IDBRequest<StoredAccount | undefined>);
+      if (!account) return;
+      // Шифруем до транзакции: транзакция IndexedDB закрывается на первом же await.
+      const sealed = await seal(account.key, text);
+      const draft: StoredDraft = { userId, roomId, sealed };
+      await transact(db, DRAFTS, 'readwrite', (s) => s.put(draft));
+    });
   },
 
   /** Для тестов и «стереть всё»: база аккаунтов целиком. */

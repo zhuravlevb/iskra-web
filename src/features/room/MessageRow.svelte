@@ -65,9 +65,9 @@
             <em>{t('message.unsupported')}</em>
           {:else if kind.type === 'poll'}
             <span class="label">{t('preview.poll')}</span>
-            <strong class="question">{kind.question}</strong>
+            <strong class="question">{kind.poll.question}</strong>
             <ol class="answers">
-              {#each kind.answers as answer, i (i)}<li>{answer}</li>{/each}
+              {#each kind.poll.answers as answer (answer.id)}<li>{answer.text}</li>{/each}
             </ol>
           {:else}
             <span class="label">{attachmentLabel(kind)}</span>

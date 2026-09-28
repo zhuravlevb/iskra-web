@@ -41,6 +41,8 @@ export interface DemoEvent {
   sender: string;
   content: Record<string, unknown>;
   state_key?: string;
+  /** Редакция: что удалено (в комнатах до v11 — на верхнем уровне). */
+  redacts?: string;
   origin_server_ts?: number;
   unsigned?: Record<string, unknown>;
 }
@@ -74,7 +76,8 @@ function member(roomId: string, userId: string, membership = 'join'): DemoEvent 
   };
 }
 
-function roomState(roomId: string, creator: string, members: string[], extra: DemoEvent[] = []): DemoEvent[] {
+/** `admins` — кроме создателя: в личном чате, как у настоящих клиентов, админы оба. */
+function roomState(roomId: string, creator: string, members: string[], extra: DemoEvent[] = [], admins: string[] = []): DemoEvent[] {
   return [
     {
       type: 'm.room.create',
@@ -88,7 +91,13 @@ function roomState(roomId: string, creator: string, members: string[], extra: De
       type: 'm.room.power_levels',
       sender: creator,
       state_key: '',
-      content: { users: { [creator]: 100 }, users_default: 0, events_default: 0, state_default: 50 },
+      content: {
+        users: Object.fromEntries([creator, ...admins].map((u) => [u, 100])),
+        users_default: 0,
+        events_default: 0,
+        state_default: 50,
+        redact: 50,
+      },
       event_id: `$power-${roomId}`,
     },
     ...extra,
@@ -143,6 +152,9 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
   const weekendTimeline = stamp(
     weekend,
     [
+      // Двое вошли подряд — одна строка «Борис и Вера теперь в чате».
+      { type: 'm.room.member', sender: boris, state_key: boris, content: { membership: 'join', displayname: 'Борис' } },
+      { type: 'm.room.member', sender: vera, state_key: vera, content: { membership: 'join', displayname: 'Вера' } },
       text(boris, 'Кто что берёт на пикник?'),
       text(vera, 'Я — пирог'),
       {
@@ -162,6 +174,11 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
           'm.text': [{ body: 'Куда едем?\n1. На озеро\n2. В лес\n3. Никуда, дома хорошо' }],
         },
       },
+      {
+        type: 'm.poll.response',
+        sender: vera,
+        content: { 'm.relates_to': { rel_type: 'm.reference', event_id: '$weekend-4' }, 'm.selections': ['lake'] },
+      },
       text(vera, 'Алиса, ты с нами?', {
         format: 'org.matrix.custom.html',
         formatted_body: `<a href="https://matrix.to/#/${alice}">Алиса</a>, ты с нами?`,
@@ -176,7 +193,17 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
   const quiet = demoRooms.quiet;
   const quietTimeline = stamp(
     quiet,
-    [text(boris, 'Напоминаю: собрание дома в четверг'), text(vera, 'Лифт опять не работает')],
+    [
+      text(boris, 'Напоминаю: собрание дома в четверг'),
+      // Форматированное — с тем, что должно уцелеть, и тем, что не должно: скрипт и
+      // картинка с сервера (`mxc://` внутри HTML сам не грузится).
+      text(boris, 'Повестка: лифт, двор', {
+        format: 'org.matrix.custom.html',
+        formatted_body:
+          '<p><b>Повестка</b> — <a href="https://example.org/agenda">полностью здесь</a></p><ul><li>лифт</li><li>двор</li></ul><img src="mxc://demo.iskra.invalid/plan" alt="схема двора"><script>alert(1)</script>',
+      }),
+      text(vera, 'Лифт опять не работает'),
+    ],
     now,
     60 * 5,
     30,
@@ -197,9 +224,13 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
     rooms: [
       {
         roomId: anyaRoom,
-        state: roomState(anyaRoom, anya, [anya, alice], [
-          { type: 'm.room.encryption', sender: anya, state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' }, event_id: `$enc-${anyaRoom}` },
-        ]),
+        state: roomState(
+          anyaRoom,
+          anya,
+          [anya, alice],
+          [{ type: 'm.room.encryption', sender: anya, state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' }, event_id: `$enc-${anyaRoom}` }],
+          [alice],
+        ),
         timeline: anyaTimeline,
         unread: { notifications: 2, highlights: 0 },
         readUpTo: `$anya-4`,
@@ -209,6 +240,8 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
         roomId: weekend,
         state: roomState(weekend, boris, [boris, alice, vera], [
           { type: 'm.room.name', sender: boris, state_key: '', content: { name: 'Выходные' }, event_id: `$name-${weekend}` },
+          // Закреплено Борисом; Алиса здесь не админ — закреплять сама не может.
+          { type: 'm.room.pinned_events', sender: boris, state_key: '', content: { pinned: ['$weekend-2'] }, event_id: `$pinned-${weekend}` },
         ]),
         timeline: weekendTimeline,
         unread: { notifications: 3, highlights: 1 },
