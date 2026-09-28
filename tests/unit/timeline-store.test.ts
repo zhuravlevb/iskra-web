@@ -8,8 +8,12 @@ import { quietLogger } from '../../src/core/support/logger';
 let client: MatrixClient | undefined;
 let store: TimelineStore | undefined;
 
-afterEach(() => {
+afterEach(async () => {
   store?.destroy();
+  // Rust-крипто после синхронизации проверяет резервную копию в фоне. Остановить клиент
+  // посреди проверки — освободить olm-машину у неё из-под рук («null pointer passed to
+  // rust»). Идущая проверка одна, и этот вызов возвращает её же — дождаться и остановить.
+  await client?.getCrypto()?.checkKeyBackupAndEnable().catch(() => {});
   client?.stopClient();
   client = store = undefined;
 });

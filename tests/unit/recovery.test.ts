@@ -6,9 +6,19 @@ import { SecretStorageKeyHolder } from '../../src/core/encryption/secretStorageK
 import { quietLogger } from '../../src/core/support/logger';
 
 const clients: MatrixClient[] = [];
-afterEach(() => {
-  for (const c of clients.splice(0)) c.stopClient();
+afterEach(async () => {
+  for (const c of clients.splice(0)) await stop(c);
 });
+
+/**
+ * Остановить, дождавшись фоновой проверки резервной копии: иначе она доработает на уже
+ * освобождённой olm-машине («null pointer passed to rust»). Проверка одна, и этот вызов
+ * возвращает её же.
+ */
+async function stop(client: MatrixClient): Promise<void> {
+  await client.getCrypto()?.checkKeyBackupAndEnable().catch(() => {});
+  client.stopClient();
+}
 
 /** Новое устройство: вход паролем, Rust-крипто в памяти, первая синхронизация. */
 async function device(server: DemoHomeserver) {
@@ -50,7 +60,7 @@ describe('код восстановления на демо-сервере', () 
     const first = await device(server);
     await first.recovery.refresh();
     const code = (await first.recovery.protectHistory())!;
-    first.client.stopClient();
+    await stop(first.client);
 
     const second = await device(server);
     expect(await second.recovery.refresh()).toBe('keyNeeded');
@@ -76,7 +86,7 @@ describe('код восстановления на демо-сервере', () 
     const oldCode = (await first.recovery.protectHistory())!;
     const newCode = (await first.recovery.makeNewKey())!;
     expect(newCode).not.toBe(oldCode);
-    first.client.stopClient();
+    await stop(first.client);
 
     const second = await device(server);
     expect(await second.recovery.restore(oldCode)).toBe(false);
@@ -89,7 +99,7 @@ describe('код восстановления на демо-сервере', () 
     const first = await device(server);
     await first.recovery.refresh();
     await first.recovery.protectHistory();
-    first.client.stopClient();
+    await stop(first.client);
 
     const second = await device(server);
     expect(await second.recovery.refresh()).toBe('keyNeeded');
@@ -109,7 +119,7 @@ describe('код восстановления на демо-сервере', () 
     const first = await device(server);
     await first.recovery.refresh();
     await first.recovery.protectHistory();
-    first.client.stopClient();
+    await stop(first.client);
 
     const second = await device(server);
     await second.recovery.refresh();
