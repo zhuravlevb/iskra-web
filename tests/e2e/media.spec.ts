@@ -16,6 +16,29 @@ async function openRoom(page: Page, name: RegExp) {
   await expect(page.getByRole('log')).toBeVisible();
 }
 
+/** Диагностика: куда на самом деле попадают нажатия — в консоль страницы. */
+async function traceClicks(page: Page) {
+  await page.evaluate(() => {
+    const describe = (n: EventTarget | null) =>
+      n instanceof Element ? `${n.tagName.toLowerCase()}.${[...n.classList].join('.')}[${n.getAttribute('aria-label') ?? ''}]` : String(n);
+    for (const type of ['pointerdown', 'pointerup', 'click']) {
+      document.addEventListener(type, (e) => {
+        const p = e as PointerEvent;
+        console.debug(`[${type}] ${describe(e.target)} at ${p.clientX},${p.clientY} hit ${describe(document.elementFromPoint(p.clientX, p.clientY))} prevented=${e.defaultPrevented}`);
+      }, true);
+    }
+    new MutationObserver((records) => {
+      for (const r of records)
+        for (const n of [...r.addedNodes, ...r.removedNodes])
+          if (n instanceof HTMLDialogElement || (n instanceof Element && n.querySelector('dialog')))
+            console.debug(`[dialog] ${r.addedNodes.length ? 'added' : 'removed'} ${describe(n)}`);
+    }).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('close', (e) => console.debug(`[close] ${describe(e.target)}`), true);
+    const log = document.querySelector('[role=log]')?.parentElement;
+    log?.addEventListener('scroll', () => console.debug(`[scroll] ${log.scrollTop}`), { capture: true });
+  });
+}
+
 test('фото в ленте: место отведено до загрузки, просмотрщик листает и закрывается', async ({ page }, info) => {
   const problems = watchForProblems(page);
   await signInToDemo(page);
@@ -28,6 +51,7 @@ test('фото в ленте: место отведено до загрузки,
   await expect(photos.first().locator('img')).toHaveAttribute('src', /^blob:/);
   await expect(page.getByRole('log')).toContainText('Озеро прошлым летом');
 
+  await traceClicks(page);
   await photos.first().click();
   const viewer = page.getByRole('dialog', { name: 'Фото' });
   await expect(viewer).toBeVisible();
@@ -86,7 +110,10 @@ test('вставка картинки из буфера и перетаскив�
   await page.evaluate((bytes) => {
     const data = new DataTransfer();
     data.items.add(new File([new Uint8Array(bytes)], 'image.png', { type: 'image/png' }));
-    document.querySelector('textarea')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    // Gecko не берёт `clipboardData` из init (у него свой ClipboardEventInit) — подставляем.
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    document.querySelector('textarea')!.dispatchEvent(event);
   }, [...PNG]);
   await expect(page.getByRole('img', { name: 'Фото к сообщению' })).toHaveCount(1);
   await expect(field).toHaveValue('');
@@ -114,6 +141,7 @@ test('десктоп: Ctrl/⌘ Shift U открывает выбор файла;
   await page.getByRole('textbox', { name: 'Сообщение' }).press('ControlOrMeta+Shift+U');
   await chooser;
 
+  await traceClicks(page);
   await page.getByRole('log').getByRole('button', { name: 'Фото' }).first().click();
   const viewer = page.getByRole('dialog', { name: 'Фото' });
   const img = viewer.locator('img');
