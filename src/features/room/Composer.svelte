@@ -5,21 +5,56 @@
   отправляет, `Shift+Enter` — новая строка; на сенсорном — наоборот: `Enter` переносит
   строку, отправляет кнопка. Ноутбук с сенсорным экраном широкий, но у него есть мышь.
 
+  Над полем — полоса ответа или правки. `Esc` её убирает, `↑` в пустом поле берёт в правку
+  последнее своё сообщение. Текст и полосу держит `RoomView` (черновик, «печатает»);
+  композер только показывает и сообщает.
+
   «Стекло» — навигационный слой: полупрозрачность и размытие, где браузер их тянет.
 -->
 <script lang="ts">
   import { viewport } from '../../design/viewport.svelte.ts';
   import { t } from '../../i18n/index.svelte.ts';
+  import type { ComposerContext } from './actions';
+  import { attachmentLabel } from './text';
 
   interface Props {
+    text: string;
+    context: ComposerContext;
     onsend: (text: string) => void;
+    /** Человек что-то набрал или стёр — не программная подстановка черновика. */
+    oninput?: (text: string) => void;
+    oncancelcontext: () => void;
+    /** `↑` в пустом поле. `true` — нашлось, что править. */
+    oneditlast: () => boolean;
     disabled?: boolean;
   }
-  let { onsend, disabled = false }: Props = $props();
+  let { text = $bindable(''), context, onsend, oninput, oncancelcontext, oneditlast, disabled = false }: Props = $props();
 
-  let text = $state('');
   let field: HTMLTextAreaElement | undefined = $state();
   const empty = $derived(text.trim() === '');
+
+  /** Одна строка о том, на что отвечаем или что правим. */
+  const quote = $derived.by(() => {
+    const kind = context?.message.kind;
+    if (!kind) return '';
+    if ('body' in kind) return kind.body.split('\n')[0] ?? '';
+    if (kind.type === 'poll') return kind.poll.question;
+    return attachmentLabel(kind);
+  });
+
+  // Взяли в правку или начали отвечать — поле в фокусе, курсор в конце. Кадром позже:
+  // закрывающееся меню (`<dialog>`) возвращает фокус туда, откуда его открыли, и сделало
+  // бы это после нас.
+  $effect(() => {
+    if (!context || !field) return;
+    const target = field;
+    const frame = requestAnimationFrame(() => {
+      target.focus();
+      const end = target.value.length;
+      target.setSelectionRange(end, end);
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
   /** Поле растёт с текстом — до потолка, дальше прокручивается само. */
   function grow() {
@@ -35,13 +70,24 @@
   function send() {
     if (empty || disabled) return;
     onsend(text);
-    text = '';
     field?.focus();
   }
 
   function onkeydown(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    if (event.key === 'Escape' && context) {
+      // Своё `Esc` — убрать полосу; до «закрыть верхнее» уровня приложения не доходит.
+      event.preventDefault();
+      event.stopPropagation();
+      oncancelcontext();
+      return;
+    }
+    if (event.key === 'ArrowUp' && text === '' && !context && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+      if (oneditlast()) event.preventDefault();
+      return;
+    }
     // Набор через IME (японский, китайский…) — Enter подтверждает слово, а не отправляет.
-    if (event.key !== 'Enter' || event.isComposing) return;
+    if (event.key !== 'Enter') return;
     const sends = viewport.finePointer ? !event.shiftKey : false;
     if (!sends) return;
     event.preventDefault();
@@ -54,8 +100,26 @@
   }
 </script>
 
+<div class="composer glass">
+{#if context}
+  <div class="context">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      {#if context.kind === 'reply'}<path d="M10 7L4 12l6 5M4 12h11a5 5 0 0 1 5 5v1" />{:else}<path d="M4 20h4L19 9l-4-4L4 16v4z" />{/if}
+    </svg>
+    <span class="what">
+      <span class="title">
+        <strong>{context.kind === 'reply' ? t('room.replyingTo') : t('room.editingMessage')}</strong>
+        {#if context.kind === 'reply'}<span class="who">{context.message.senderName}</span>{/if}
+      </span>
+      <span class="quote">{quote}</span>
+    </span>
+    <button type="button" class="cancel" aria-label={t('room.stopReplying')} title={t('room.stopReplying')} onclick={oncancelcontext}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+  </div>
+{/if}
 <form
-  class="composer glass"
+  class="row"
   onsubmit={(event) => {
     event.preventDefault();
     send();
@@ -70,22 +134,79 @@
     enterkeyhint={viewport.finePointer ? 'send' : 'enter'}
     {disabled}
     {onkeydown}
+    oninput={() => oninput?.(text)}
   ></textarea>
   <button type="submit" class="send" disabled={empty || disabled} aria-label={t('room.send')} title={t('room.send')}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
   </button>
 </form>
+</div>
 
 <style>
   .composer {
+    width: 100%;
+    padding: var(--space-close) var(--timeline-gutter);
+    padding-block-end: max(var(--space-close), env(safe-area-inset-bottom));
+  }
+  .row,
+  .context {
     display: flex;
     align-items: flex-end;
     gap: var(--space-close);
-    width: 100%;
-    max-width: calc(var(--column-timeline-max) + 2 * var(--timeline-gutter));
+    max-width: var(--column-timeline-max);
     margin-inline: auto;
-    padding: var(--space-close) var(--timeline-gutter);
-    padding-block-end: max(var(--space-close), env(safe-area-inset-bottom));
+  }
+  .context {
+    align-items: center;
+    margin-block-end: var(--space-close);
+    padding-inline-start: var(--space-close);
+    color: var(--accent);
+  }
+  .context > svg,
+  .cancel svg {
+    flex: none;
+    width: var(--size-icon);
+    height: var(--size-icon);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .what {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    padding-inline-start: var(--space-close);
+    border-inline-start: 2px solid currentColor;
+    font-size: var(--font-size-caption);
+  }
+  .title {
+    display: flex;
+    gap: var(--space-tight);
+  }
+  .who {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .quote {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+  }
+  .cancel {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--tap-target);
+    height: var(--tap-target);
+    border: none;
+    border-radius: var(--radius-circle);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
   }
   .glass {
     background: var(--color-glass-opaque);

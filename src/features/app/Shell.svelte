@@ -24,11 +24,14 @@
   import QuickSwitcher from '../rooms/QuickSwitcher.svelte';
   import { roomName } from '../rooms/text';
   import RoomView from '../room/RoomView.svelte';
+  import HotkeyHelp from './HotkeyHelp.svelte';
   import LockedHistoryStrip from '../recovery/LockedHistoryStrip.svelte';
 
   let { session }: { session: UserSession } = $props();
   let confirmingSignOut = $state(false);
   let switching = $state(false);
+  let helping = $state(false);
+  let roomView: RoomView | undefined = $state();
 
   let panelOpen = $state(false);
   const roomId = $derived(router.route.name === 'room' ? router.route.roomId : null);
@@ -78,6 +81,21 @@
         break;
       case 'nextUnread':
         step(1, true);
+        break;
+      case 'help':
+        helping = true;
+        break;
+      case 'escape':
+        // Открытое окно или меню закрывается само (`<dialog>`); это — когда закрывать нечего.
+        if (document.querySelector('dialog[open]')) return;
+        if (panelOpen) panelOpen = false;
+        else if (roomId) roomView?.escape();
+        else return;
+        break;
+      case 'pageUp':
+      case 'pageDown':
+        if (!roomId) return;
+        roomView?.page(action === 'pageUp' ? -1 : 1);
         break;
       default:
         return;
@@ -133,7 +151,7 @@
         {/snippet}
       </Bar>
       {#key roomId}
-        <RoomView {session} {roomId} />
+        <RoomView bind:this={roomView} {session} {roomId} />
       {/key}
       </div>
     {:else}
@@ -153,6 +171,7 @@
 <svelte:window {onkeydown} />
 
 <QuickSwitcher {session} open={switching} onclose={() => (switching = false)} />
+<HotkeyHelp open={helping} onclose={() => (helping = false)} />
 
 <ConfirmDialog
   open={confirmingSignOut}

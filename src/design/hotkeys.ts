@@ -21,6 +21,9 @@ export type HotkeyId =
   | 'previousUnread'
   | 'nextUnread'
   | 'escape'
+  | 'pageUp'
+  | 'pageDown'
+  | 'editLast'
   | 'settings'
   | 'help';
 
@@ -29,6 +32,13 @@ export interface Hotkey {
   chords: Chord[];
   /** Работает и из поля ввода. */
   inInput?: boolean;
+  /**
+   * Обрабатывает не приложение, а поле, для которого сочетание и сделано (`↑` в пустом
+   * композере). В таблице — ради справки и проверки на дубли; `match` его не отдаёт.
+   */
+  local?: boolean;
+  /** Ещё не работает (настройки — этап 8): в справке не показываем. */
+  planned?: boolean;
 }
 
 export const hotkeys: readonly Hotkey[] = [
@@ -38,7 +48,10 @@ export const hotkeys: readonly Hotkey[] = [
   { id: 'previousUnread', chords: [{ key: 'ArrowUp', alt: true, shift: true }], inInput: true },
   { id: 'nextUnread', chords: [{ key: 'ArrowDown', alt: true, shift: true }], inInput: true },
   { id: 'escape', chords: [{ key: 'Escape' }], inInput: true },
-  { id: 'settings', chords: [{ key: ',', primary: true }], inInput: true },
+  { id: 'pageUp', chords: [{ key: 'PageUp' }], inInput: true },
+  { id: 'pageDown', chords: [{ key: 'PageDown' }], inInput: true },
+  { id: 'editLast', chords: [{ key: 'ArrowUp' }], inInput: true, local: true },
+  { id: 'settings', chords: [{ key: ',', primary: true }], inInput: true, planned: true },
   { id: 'help', chords: [{ key: '?' }, { key: '/', primary: true }] },
 ];
 
@@ -88,6 +101,7 @@ export function match(event: KeyboardEvent, mac = isMac()): HotkeyId | undefined
   const chord = chordOf(event, mac);
   const inInput = isTextInput(event.target);
   for (const hotkey of hotkeys) {
+    if (hotkey.local || hotkey.planned) continue;
     if (inInput && !hotkey.inInput) continue;
     if (hotkey.chords.some((c) => sameChord(c, chord))) return hotkey.id;
   }
@@ -96,7 +110,15 @@ export function match(event: KeyboardEvent, mac = isMac()): HotkeyId | undefined
 
 /** Как показать сочетание человеку: «Ctrl K», «⌘K», «Alt ↑», «⌥↑». */
 export function describe(chord: Chord, mac = isMac()): string {
-  const keyName: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' };
+  const keyName: Record<string, string> = {
+    ArrowUp: '↑',
+    ArrowDown: '↓',
+    ArrowLeft: '←',
+    ArrowRight: '→',
+    Escape: 'Esc',
+    PageUp: 'Page Up',
+    PageDown: 'Page Down',
+  };
   const key = keyName[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key);
   const parts = mac
     ? [chord.primary ? '⌘' : '', chord.alt ? '⌥' : '', chord.shift ? '⇧' : '', key]

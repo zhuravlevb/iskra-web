@@ -6,7 +6,7 @@
   подгруженной истории. Новые входящие объявляет отдельная вежливая область.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import EmptyState from '../../design/EmptyState.svelte';
   import PrimaryButton from '../../design/PrimaryButton.svelte';
   import { ScrollAnchor } from '../../design/scrollAnchor.svelte.ts';
@@ -15,14 +15,16 @@
   import type { UserSession } from '../../core/session/userSession.svelte.ts';
   import { i18n, t } from '../../i18n/index.svelte.ts';
   import { Photo, pixelsFor } from '../rooms/faces.svelte.ts';
+  import type { MessageActions } from './actions';
   import MessageRow from './MessageRow.svelte';
 
   interface Props {
     store: TimelineStore;
     session: UserSession;
     showSenders: boolean;
+    actions: MessageActions;
   }
-  let { store, session, showSenders }: Props = $props();
+  let { store, session, showSenders, actions }: Props = $props();
 
   let container: HTMLElement | undefined = $state();
   let content: HTMLElement | undefined = $state();
@@ -82,6 +84,33 @@
     lastKey = last?.key;
   });
 
+  /**
+   * К сообщению — для полосы закреплённого. Нет среди загруженного — лента листает назад
+   * (не бесконечно), потом прокрутка в середину экрана и короткая подсветка.
+   */
+  export async function reveal(eventId: string): Promise<void> {
+    if (!(await store.reveal(eventId))) return;
+    const key = store.messages.find((m) => m.eventId === eventId)?.key;
+    await tick();
+    const element = key ? content?.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(key)}"]`) : null;
+    if (!element) return;
+    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    element.classList.add('flash');
+    setTimeout(() => element.classList.remove('flash'), 1600);
+  }
+
+  /** Страница — чуть меньше экрана: последняя строка прошлой остаётся видна. */
+  export function page(direction: -1 | 1): void {
+    if (!container) return;
+    container.scrollBy({ top: direction * container.clientHeight * 0.85 });
+  }
+
+  /** `Esc` в чате: вниз, к последнему, — и прочитано. */
+  export function toBottom(): void {
+    anchor?.scrollToBottom();
+    maybeMarkRead();
+  }
+
   // Кэш фото отправителей на время жизни ленты; реактивен сам `Photo`, а не словарь.
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const faces = new Map<string, Photo>();
@@ -126,8 +155,7 @@
             lastInRun={item.lastInRun}
             {showSenders}
             senderPhoto={showSenders ? photoOf(item.message.senderId, item.message.senderAvatarUrl) : undefined}
-            onretry={(key) => store.retry(key)}
-            ondiscard={(key) => store.discard(key)}
+            {actions}
           />
         {/if}
       </div>
@@ -161,6 +189,9 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* Панель по наведению у широкого пузыря выходит за край колонки — горизонтальной
+       прокрутки ленте от этого не положено. */
+    overflow-x: hidden;
     overscroll-behavior: contain;
   }
   .content {
@@ -171,6 +202,18 @@
     margin-inline: auto;
     padding: var(--space-normal) var(--timeline-gutter);
     justify-content: flex-end;
+  }
+  .item:global(.flash) {
+    border-radius: var(--radius-bubble);
+    animation: flash 1.6s ease-out;
+  }
+  @keyframes flash {
+    from {
+      background: var(--color-selected);
+    }
+    to {
+      background: transparent;
+    }
   }
   .day {
     display: flex;
