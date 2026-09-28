@@ -8,6 +8,7 @@
   import type { Attachment } from '../../core/timeline/message';
   import { t } from '../../i18n/index.svelte.ts';
   import { aspect, ratio } from './files';
+  import { untrack } from 'svelte';
 
   interface Props {
     kind: 'image' | 'sticker' | 'video' | 'videoNote';
@@ -27,13 +28,22 @@
   );
   const video = $derived(kind === 'video' || kind === 'videoNote');
 
+  /**
+   * Что показываем — по содержимому, а не по объекту: лента пересобирает сообщения на каждой
+   * синхронизации, и новый объект того же вложения не должен сбрасывать картинку. Иначе
+   * `<img>` на миг пропадает и появляется заново — мигает, а Firefox, у которого между
+   * нажатием и отпусканием элемент ушёл из DOM, не присылает `click` вовсе.
+   */
+  const identity = $derived(`${attachment.thumbnail?.source.mxc ?? ''} ${attachment.source?.mxc ?? ''} ${attachment.mimetype ?? ''}`);
+
   $effect(() => {
-    const target = attachment;
+    const key = identity;
+    const target = untrack(() => attachment);
     const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
     url = undefined;
     failed = false;
     void media.preview(target, 320 * dpr).then((loaded) => {
-      if (attachment !== target) return;
+      if (identity !== key) return;
       url = loaded;
       // Видео без миниатюры — не сбой: у него просто нет картинки до просмотра.
       failed = !loaded && !(target.mimetype ?? '').startsWith('video/') && kind !== 'video' && kind !== 'videoNote';
