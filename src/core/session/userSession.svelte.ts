@@ -25,6 +25,8 @@ import { MediaLoader } from '../media/media';
 import { uploadClientFor } from '../media/upload';
 import { ThumbnailCache } from '../media/thumbnails';
 import { RoomListStore } from '../rooms/roomListStore.svelte.ts';
+import { RoomDetailsStore } from '../rooms/roomDetails.svelte.ts';
+import { createDirect, createGroup } from '../rooms/create';
 import { TimelineStore } from '../timeline/timelineStore.svelte.ts';
 import { RecoveryStore } from '../encryption/recovery.svelte.ts';
 import { SecretStorageKeyHolder } from '../encryption/secretStorageKey';
@@ -141,6 +143,21 @@ export class UserSession {
       name: user?.displayName || this.userId,
       ...(user?.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
     };
+  }
+
+  // ————— Комнаты: «О чате» и новые —————
+
+  /** «О чате» комнаты. Живёт, пока открыта панель: тот, кто открыл, и `destroy()`. */
+  roomDetails(roomId: string): RoomDetailsStore {
+    return new RoomDetailsStore(this.client, roomId, (id) => this.rooms.get(id)?.kind === 'direct');
+  }
+
+  createDirect(userId: string): Promise<string> {
+    return createDirect(this.client, userId);
+  }
+
+  createGroup(name: string, open: boolean): Promise<string> {
+    return createGroup(this.client, name, open);
   }
 
   // ————— Профиль, устройства, аккаунт —————

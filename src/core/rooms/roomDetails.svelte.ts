@@ -10,7 +10,7 @@
  * сравнивает сервер: два администратора оба «администраторы», но тронуть друг друга не
  * могут, а создатель комнаты версии 12 выше любого числа (`Infinity`).
  */
-import { Direction, EventType, RoomEvent, RoomMemberEvent, RoomStateEvent, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import { Direction, EventType, MatrixEvent, RoomEvent, RoomMemberEvent, RoomStateEvent, type MatrixClient, type Room } from 'matrix-js-sdk';
 import { alertsRules, roomAlerts, type RoomAlerts } from './pushRules';
 
 export type RoomRole = 'administrator' | 'moderator' | 'member';
@@ -26,6 +26,16 @@ export interface MemberSummary {
   /** В комнате есть кто-то ещё с тем же именем — рядом показать Matrix ID. */
   ambiguous: boolean;
   invited: boolean;
+}
+
+/** Закреплённое — для списка в панели: кто и что, одной строкой. */
+export interface PinnedSummary {
+  eventId: string;
+  senderName?: string;
+  /** Первая строка текста; пусто — не текст или не загрузилось. */
+  text: string;
+  /** Достать не вышло: удалено или недоступно. */
+  unavailable: boolean;
 }
 
 export interface RoomPermissions {
@@ -70,6 +80,8 @@ export class RoomDetailsStore {
   members = $state.raw<MemberSummary[]>([]);
   permissions = $state.raw<RoomPermissions>(DENIED);
   alerts = $state<RoomAlerts>('all');
+  /** Закреплённые — последнее закреплённое первым. */
+  pinned = $state.raw<PinnedSummary[]>([]);
   /** Мой вес — с ним сравнивается каждое «можно ли тронуть этого человека». */
   ownAuthority = $state(0);
   working = $state(false);
@@ -78,6 +90,9 @@ export class RoomDetailsStore {
   private readonly me: string;
   private readonly detach: Array<() => void> = [];
   private membersLoaded = false;
+  // Кэш достатого по одному, не состояние: экран видит `pinned`.
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  private readonly fetched = new Map<string, MatrixEvent | null>();
 
   constructor(
     private readonly client: MatrixClient,
@@ -178,6 +193,36 @@ export class RoomDetailsStore {
       canChangeRoles: may(EventType.RoomPowerLevels),
     };
     this.readAlerts();
+    this.readPinned(room, state.getStateEvents('m.room.pinned_events', '')?.getContent()['pinned']);
+  }
+
+  private readPinned(room: Room, raw: unknown): void {
+    const ids = (Array.isArray(raw) ? raw : []).filter((id): id is string => typeof id === 'string').reverse();
+    this.pinned = ids.map((eventId): PinnedSummary => {
+      const event = room.findEventById(eventId) ?? this.fetched.get(eventId) ?? undefined;
+      if (event === undefined && !this.fetched.has(eventId)) void this.fetchPinned(eventId);
+      if (!event) return { eventId, text: '', unavailable: this.fetched.get(eventId) === null };
+      const sender = event.getSender();
+      const body = event.isRedacted() ? '' : event.getContent()['body'];
+      return {
+        eventId,
+        ...(sender ? { senderName: room.getMember(sender)?.name || sender } : {}),
+        text: typeof body === 'string' ? (body.split('\n')[0] ?? '') : '',
+        unavailable: event.isRedacted(),
+      };
+    });
+  }
+
+  private async fetchPinned(eventId: string): Promise<void> {
+    this.fetched.set(eventId, null);
+    try {
+      const event = new MatrixEvent(await this.client.fetchRoomEvent(this.roomId, eventId));
+      await this.client.decryptEventIfNeeded(event);
+      this.fetched.set(eventId, event);
+    } catch {
+      // Удалено или не видно этому аккаунту — «недоступно».
+    }
+    this.read();
   }
 
   private readAlerts(): void {

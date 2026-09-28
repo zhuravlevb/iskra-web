@@ -25,6 +25,7 @@
   import { roomName } from '../rooms/text';
   import RoomView from '../room/RoomView.svelte';
   import HotkeyHelp from './HotkeyHelp.svelte';
+  import RoomPanel from '../room/RoomPanel.svelte';
   import LockedHistoryStrip from '../recovery/LockedHistoryStrip.svelte';
 
   let { session }: { session: UserSession } = $props();
@@ -164,11 +165,26 @@
   {/snippet}
 
   {#snippet panel()}
-    <Bar title={t('room.info')}>
-      {#snippet trailing()}
-        <IconButton label={t('room.infoClose')} onclick={() => (panelOpen = false)}><Icon name="close" /></IconButton>
-      {/snippet}
-    </Bar>
+    <div class="panel-column">
+      <Bar title={t('room.info')}>
+        {#snippet trailing()}
+          <IconButton label={t('room.infoClose')} onclick={() => (panelOpen = false)}><Icon name="close" /></IconButton>
+        {/snippet}
+      </Bar>
+      {#if roomId}
+        {#key roomId}
+          <RoomPanel
+            {session}
+            {roomId}
+            onjump={(eventId) => {
+              // На узком экране лист закрывает ленту — к сообщению можно только закрыв его.
+              if (viewport.layout !== 'three') panelOpen = false;
+              roomView?.reveal(eventId);
+            }}
+          />
+        {/key}
+      {/if}
+    </div>
   {/snippet}
 </Columns>
 
@@ -197,7 +213,17 @@
     flex-direction: column;
     height: 100%;
   }
-  .list-column {
+.panel-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .panel-column > :global(:last-child) {
+    flex: 1;
+    min-height: 0;
+  }
+    .list-column {
     display: flex;
     flex-direction: column;
     height: 100%;

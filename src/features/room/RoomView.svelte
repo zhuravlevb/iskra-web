@@ -237,7 +237,12 @@
     timeline?.toBottom();
   }
 
-  /** `Page Up` / `Page Down` — листать ленту, даже когда фокус в композере. */
+  /** Из панели «О чате»: к закреплённому сообщению. */
+  export function reveal(eventId: string): void {
+    void timeline?.reveal(eventId);
+  }
+
+    /** `Page Up` / `Page Down` — листать ленту, даже когда фокус в композере. */
   export function page(direction: -1 | 1): void {
     timeline?.page(direction);
   }
