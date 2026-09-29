@@ -28,8 +28,12 @@ export function touchGestures(node: HTMLElement, handlers: GestureHandlers) {
   let dx = 0;
   let horizontal = false;
   let pressTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Долгое нажатие уже открыло меню — `contextmenu` следом (Android) лишний. */
-  let pressedAt = 0;
+  /**
+   * Долгое нажатие уже открыло меню — `contextmenu` следом (Android) лишний. Изначально —
+   * «никогда», а не 0: `performance.now()` считается от загрузки страницы, и с нулём первая
+   * секунда её жизни глотала любой правый щелчок как «дубль».
+   */
+  let pressedAt = Number.NEGATIVE_INFINITY;
 
   const reset = () => {
     clearTimeout(pressTimer);
