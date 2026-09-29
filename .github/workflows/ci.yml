@@ -89,8 +89,13 @@ jobs:
         env:
           ISKRA_BASE: /${{ github.event.repository.name }}/
           ISKRA_META_CSP: '1'
+      # Имя с номером попытки: повтор job в том же запуске иначе находит два артефакта
+      # github-pages (от первой попытки и от этой), и deploy-pages отказывается выбирать.
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist
+          name: github-pages-${{ github.run_attempt }}
       - id: deploy
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
