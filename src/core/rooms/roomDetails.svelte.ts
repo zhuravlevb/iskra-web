@@ -104,7 +104,7 @@ export class RoomDetailsStore {
     private readonly client: MatrixClient,
     readonly roomId: string,
     private readonly isDirect: (roomId: string) => boolean,
-    private readonly localNames?: LocalNameSource & { set(roomId: string, name: string | null): void },
+    private readonly localNames?: LocalNameSource & { set(roomId: string, name: string | null): Promise<void> },
   ) {
     this.me = client.getSafeUserId();
     if (localNames) this.detach.push(localNames.onChange((changed) => (changed === null || changed === roomId) && this.read()));
@@ -284,8 +284,8 @@ export class RoomDetailsStore {
    * это `m.room.name` в комнате на двоих, которое собеседник получит и прочтёт. Пустое —
    * вернуть настоящее имя.
    */
-  renameLocally(name: string | null): void {
-    if (this.direct) this.localNames?.set(this.roomId, name);
+  async renameLocally(name: string | null): Promise<void> {
+    if (this.direct) await this.localNames?.set(this.roomId, name);
   }
 
   rename(name: string): Promise<boolean> {

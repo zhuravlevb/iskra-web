@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { enterDemoCredentials, watchForProblems } from './helpers';
+import { enterDemoCredentials, openApp, watchForProblems } from './helpers';
 
 // Чистое устройство: слайды ещё не показаны (остальным тестам их засевает конфиг).
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test('первый раз на устройстве — слайды, потом вход; после входа — привет, цвет, мордочки', async ({ page }) => {
   const problems = watchForProblems(page);
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await openApp(page);
   await expect(page.getByRole('heading', { name: 'Iskra', level: 1 })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Слайд 1 из 5' })).toBeVisible();
   // Стрелками — на следующий, и за последний не уезжает.

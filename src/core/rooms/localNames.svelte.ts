@@ -61,18 +61,20 @@ export class LocalNames implements LocalNameSource {
 
   /**
    * Поставить имя, или — пустым — вернуть настоящее. Обрезается на входе: лишний пробел —
-   * не переименование; ничего не поменялось — никого не будим. Сразу в памяти, на диск —
-   * следом: запрос, который мог бы не пройти, здесь только к своей базе.
+   * не переименование; ничего не поменялось — никого не будим. В памяти — сразу, и экраны
+   * узнают сразу; промис — это запись на диск. Его стоит дождаться, прежде чем говорить
+   * «готово»: вкладка, закрытая сразу после «Сохранить», иначе потеряла бы имя. Не
+   * записалось — имя живёт до перезагрузки, и мешать человеку из-за этого нечем.
    */
-  set(roomId: string, name: string | null): void {
+  set(roomId: string, name: string | null): Promise<void> {
     const trimmed = (name ?? '').trim();
-    if ((this.names[roomId] ?? '') === trimmed) return;
+    if ((this.names[roomId] ?? '') === trimmed) return Promise.resolve();
     const next = { ...this.names };
     if (trimmed) next[roomId] = trimmed;
     else delete next[roomId];
     this.names = next;
     this.emit(roomId);
-    void this.storage.save(this.userId, roomId, trimmed).catch(() => {});
+    return this.storage.save(this.userId, roomId, trimmed).catch(() => {});
   }
 
   onChange(listener: (roomId: string | null) => void): () => void {

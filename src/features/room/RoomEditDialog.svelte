@@ -36,7 +36,8 @@
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (details.direct) {
-      details.renameLocally(localName);
+      // Дождаться записи: закрытая сразу вкладка не должна терять имя.
+      await details.renameLocally(localName);
       onclose();
       return;
     }
@@ -68,8 +69,8 @@
       <p class="help">{t('room.localName.help')}</p>
       {#if details.localName}
         <PlainButton
-          onclick={() => {
-            details.renameLocally(null);
+          onclick={async () => {
+            await details.renameLocally(null);
             onclose();
           }}>{t('room.localName.reset')}</PlainButton
         >

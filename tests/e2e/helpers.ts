@@ -89,8 +89,11 @@ export async function submitAddress(page: Page, address: string): Promise<void> 
   await field.press('Enter');
 }
 
-/** До нажатия «Войти с паролем» включительно. */
-export async function enterDemoCredentials(page: Page): Promise<void> {
+/**
+ * Открыть приложение с `/`. Firefox под Playwright изредка теряет сам переход — повторяем
+ * его здесь, одним местом, а не в каждом тесте (подробности — ниже, у повтора).
+ */
+export async function openApp(page: Page): Promise<void> {
   const log = recordConsole(page);
   // Не ждём `load`: приложению он не нужен, а Firefox в CI изредка его так и не присылает.
   try {
@@ -115,6 +118,12 @@ export async function enterDemoCredentials(page: Page): Promise<void> {
       { cause: error },
     );
   }
+}
+
+/** До нажатия «Войти с паролем» включительно. */
+export async function enterDemoCredentials(page: Page): Promise<void> {
+  await openApp(page);
+  const log = recordConsole(page);
   await submitAddress(page, DEMO_ADDRESS);
   // Демо умеет и SSO, и пароль: вход по умолчанию — через страницу сервера, пароль — за фразой.
   const passwordDoor = page.getByRole('button', { name: 'У меня только логин и пароль' });

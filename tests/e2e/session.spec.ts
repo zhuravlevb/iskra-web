@@ -1,22 +1,24 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_ADDRESS, signInToDemo, signOut, submitAddress, watchForProblems } from './helpers';
+import { DEMO_ADDRESS, openApp, signInToDemo, signOut, submitAddress, watchForProblems } from './helpers';
 
 test('экран входа под строгой CSP, без ошибок', async ({ page }) => {
   const problems = watchForProblems(page);
-  const response = await page.goto('/', { waitUntil: 'domcontentloaded' });
-  expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
+  // Заголовки — отдельным запросом: переход в Firefox идёт через повтор (`openApp`).
+  const response = await page.request.get('/');
+  expect(response.headers()['content-security-policy']).toContain("default-src 'self'");
+  await openApp(page);
   await expect(page.getByRole('heading', { name: 'Добро пожаловать в Iskra' })).toBeVisible();
   expect(problems).toEqual([]);
 });
 
 test('непонятный адрес — красная панель, а не тишина', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await openApp(page);
   await submitAddress(page, 'не адрес');
   await expect(page.getByRole('alert')).toContainText('По этому адресу мы ничего не нашли');
 });
 
 test('неверный пароль — сказано, и можно попробовать снова', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await openApp(page);
   await submitAddress(page, DEMO_ADDRESS);
   await page.getByRole('button', { name: 'У меня только логин и пароль' }).click();
   await page.getByRole('textbox', { name: 'Имя пользователя' }).fill('alice');
