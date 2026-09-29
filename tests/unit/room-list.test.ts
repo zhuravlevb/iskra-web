@@ -3,6 +3,7 @@ import { ClientEvent, createClient, SyncState, type MatrixClient } from 'matrix-
 import { DemoHomeserver } from '../../src/core/demo/server';
 import { demoRooms, demoUsers } from '../../src/core/demo/fixtures';
 import { RoomListStore } from '../../src/core/rooms/roomListStore.svelte.ts';
+import { LocalNames } from '../../src/core/rooms/localNames.svelte.ts';
 import { searchRooms } from '../../src/core/rooms/organize';
 import { emphasisOf, hasUnread } from '../../src/core/rooms/types';
 import { quietLogger } from '../../src/core/support/logger';
@@ -66,6 +67,23 @@ describe('список чатов на демо-сервере', () => {
     const anya = store.get(demoRooms.anya)!;
     expect(anya).toMatchObject({ kind: 'direct', name: 'Аня', avatarSeed: demoUsers.anya, encrypted: true, faces: [] });
     expect(anya.preview).toEqual({ kind: 'text', text: 'Возьми плед, там ветрено' });
+  });
+
+  it('локальное имя — только у личного чата, и список узнаёт о нём сразу', async () => {
+    const { client } = await started();
+    const saved: string[] = [];
+    const names = new LocalNames(demoUsers.alice, { load: async () => ({ [demoRooms.anya]: 'Анечка' }), save: async (_u, room, name) => void saved.push(`${room}=${name}`) });
+    await names.load();
+    store = new RoomListStore(client, names);
+    expect(store.get(demoRooms.anya)!.name).toBe('Анечка');
+
+    names.set(demoRooms.anya, '  ');
+    await until(() => store!.get(demoRooms.anya)!.name === 'Аня');
+    // Группу не переименовать: её имя — общее.
+    names.set(demoRooms.weekend, 'Моя дача');
+    store.flush();
+    expect(store.get(demoRooms.weekend)!.name).toBe('Выходные');
+    expect(saved).toEqual([`${demoRooms.anya}=`, `${demoRooms.weekend}=Моя дача`]);
   });
 
   it('группа без фото — лица собеседников, без себя', async () => {

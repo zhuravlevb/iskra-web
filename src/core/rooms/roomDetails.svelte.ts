@@ -11,6 +11,7 @@
  * могут, а создатель комнаты версии 12 выше любого числа (`Infinity`).
  */
 import { Direction, EventType, MatrixEvent, RoomEvent, RoomMemberEvent, RoomStateEvent, type MatrixClient, type Room } from 'matrix-js-sdk';
+import type { LocalNameSource } from './localNames.svelte.ts';
 import { alertsRules, roomAlerts, type RoomAlerts } from './pushRules';
 
 export type RoomRole = 'administrator' | 'moderator' | 'member';
@@ -70,7 +71,12 @@ export const ROLE_LEVEL: Record<RoomRole, number> = { administrator: 100, modera
 const CREATOR_IS_UNLIMITED = new Set(['12', 'org.matrix.hydra.11']);
 
 export class RoomDetailsStore {
+  /** Что на экране: локальное имя личного чата, если оно есть, иначе — `serverName`. */
   name = $state('');
+  /** Как чат называет сервер: собеседник или собственное имя комнаты. */
+  serverName = $state('');
+  /** Как *я* зову собеседника на этом устройстве (`LocalNames`); только личный чат. */
+  localName = $state<string | undefined>(undefined);
   topic = $state('');
   avatarUrl = $state<string | undefined>(undefined);
   direct = $state(false);
@@ -98,8 +104,10 @@ export class RoomDetailsStore {
     private readonly client: MatrixClient,
     readonly roomId: string,
     private readonly isDirect: (roomId: string) => boolean,
+    private readonly localNames?: LocalNameSource & { set(roomId: string, name: string | null): void },
   ) {
     this.me = client.getSafeUserId();
+    if (localNames) this.detach.push(localNames.onChange((changed) => (changed === null || changed === roomId) && this.read()));
     const on = (event: string, handler: (...args: never[]) => void) => {
       const target = client as unknown as { on(e: string, h: (...a: never[]) => void): void; off(e: string, h: (...a: never[]) => void): void };
       target.on(event, handler);
@@ -135,10 +143,12 @@ export class RoomDetailsStore {
     const room = this.room;
     if (!room) return;
     const state = room.getLiveTimeline().getState(Direction.Forward)!;
-    this.name = room.name;
+    this.direct = this.isDirect(this.roomId);
+    this.serverName = room.name;
+    this.localName = this.direct ? this.localNames?.get(this.roomId) : undefined;
+    this.name = this.localName ?? room.name;
     this.topic = (state.getStateEvents(EventType.RoomTopic, '')?.getContent()['topic'] as string | undefined) ?? '';
     this.avatarUrl = room.getMxcAvatarUrl() ?? undefined;
-    this.direct = this.isDirect(this.roomId);
     this.encrypted = room.hasEncryptionStateEvent();
     this.open = room.getJoinRule() === 'public';
 
@@ -269,9 +279,18 @@ export class RoomDetailsStore {
     }
   }
 
+  /**
+   * Назвать собеседника по-своему — на этом устройстве, и больше нигде. Не `setRoomName`:
+   * это `m.room.name` в комнате на двоих, которое собеседник получит и прочтёт. Пустое —
+   * вернуть настоящее имя.
+   */
+  renameLocally(name: string | null): void {
+    if (this.direct) this.localNames?.set(this.roomId, name);
+  }
+
   rename(name: string): Promise<boolean> {
     const value = name.trim();
-    if (value === this.name) return Promise.resolve(true);
+    if (value === this.serverName) return Promise.resolve(true);
     return this.act('rename', () => this.client.setRoomName(this.roomId, value));
   }
 

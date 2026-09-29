@@ -94,4 +94,21 @@ describe('хранилище аккаунтов', () => {
     expect(await vault.draft(alice.userId, '!a:x')).toBe('');
     expect(await vault.draft(bob.userId, '!a:x')).toBe('Чужой');
   });
+
+  it('локальные имена: по чату, под ключом аккаунта, пустое — удаляется, уходят вместе с аккаунтом', async () => {
+    const bob = { ...alice, userId: '@bob:example.org' };
+    await vault.add(alice);
+    await vault.add(bob);
+    await vault.saveLocalName(alice.userId, '!a:x', '  Мама ');
+    await vault.saveLocalName(alice.userId, '!b:x', 'Шеф');
+    await vault.saveLocalName(bob.userId, '!a:x', 'Тёща');
+    expect(await vault.localNames(alice.userId)).toEqual({ '!a:x': 'Мама', '!b:x': 'Шеф' });
+
+    await vault.saveLocalName(alice.userId, '!b:x', ' ');
+    expect(await vault.localNames(alice.userId)).toEqual({ '!a:x': 'Мама' });
+
+    await vault.remove(alice.userId);
+    expect(await vault.localNames(alice.userId)).toEqual({});
+    expect(await vault.localNames(bob.userId)).toEqual({ '!a:x': 'Тёща' });
+  });
 });

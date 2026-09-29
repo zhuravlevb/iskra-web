@@ -1,6 +1,10 @@
 <!--
   «Изменить чат»: название, описание, фото, открытость — только то, на что есть право.
   Фото чата уходит открыто: оно в состоянии комнаты, которое Matrix не шифрует.
+
+  Личный чат — другое: его имя, описание и фото принадлежат собеседнику, и менять их так,
+  что он это прочтёт, мы не предлагаем. Там одно поле — как вы зовёте человека на этом
+  устройстве (`LocalNames`); сервер о нём не знает, поэтому и без сети оно работает.
 -->
 <script lang="ts">
   import Dialog from '../../design/Dialog.svelte';
@@ -14,6 +18,7 @@
   let { open, details, session, onclose }: { open: boolean; details: RoomDetailsStore; session: UserSession; onclose: () => void } = $props();
 
   let name = $state('');
+  let localName = $state('');
   let topic = $state('');
   let isOpen = $state(false);
   let picker: HTMLInputElement | undefined = $state();
@@ -22,13 +27,19 @@
   // Открыли — поля заполняются тем, что сейчас; правки прошлого раза не висят.
   $effect(() => {
     if (!open) return;
-    name = details.name;
+    name = details.serverName;
+    localName = details.localName ?? '';
     topic = details.topic;
     isOpen = details.open;
   });
 
   async function save(event: SubmitEvent) {
     event.preventDefault();
+    if (details.direct) {
+      details.renameLocally(localName);
+      onclose();
+      return;
+    }
     const p = details.permissions;
     const done =
       (!p.canRename || (await details.rename(name))) &&
@@ -52,33 +63,46 @@
 
 <Dialog {open} title={t('room.manage.editTitle')} {onclose}>
   <form onsubmit={save}>
-    {#if details.permissions.canChangePicture}
-      <div class="picture">
-        <PlainButton onclick={() => picker?.click()}>{t('room.manage.changePicture')}</PlainButton>
-        {#if details.avatarUrl}
-          <PlainButton danger onclick={() => void details.setPicture(null)}>{t('room.manage.removePicture')}</PlainButton>
-        {/if}
-        <input bind:this={picker} type="file" accept="image/*" hidden onchange={picked} />
-      </div>
-    {/if}
-    {#if details.permissions.canRename}
-      <TextField bind:value={name} label={t('room.manage.nameHeader')} showLabel placeholder={t('room.manage.namePlaceholder')} />
-    {/if}
-    {#if details.permissions.canChangeTopic}
-      <div class="field">
-        <label for="{id}-topic">{t('room.about')}</label>
-        <textarea id="{id}-topic" bind:value={topic} rows="3" placeholder={t('room.manage.topicPlaceholder')}></textarea>
-      </div>
-    {/if}
-    {#if details.permissions.canChangeVisibility}
-      <label class="toggle">
-        <input type="checkbox" bind:checked={isOpen} />
-        <span>
-          <strong>{t('room.manage.openToAnyone')}</strong>
-          <span class="help">{t('room.manage.openToAnyoneHelp')}</span>
-          {#if isOpen && details.encrypted}<span class="help">{t('roomList.new.openMeansUnencrypted')}</span>{/if}
-        </span>
-      </label>
+    {#if details.direct}
+      <TextField bind:value={localName} label={t('room.localName.header')} showLabel placeholder={details.serverName} />
+      <p class="help">{t('room.localName.help')}</p>
+      {#if details.localName}
+        <PlainButton
+          onclick={() => {
+            details.renameLocally(null);
+            onclose();
+          }}>{t('room.localName.reset')}</PlainButton
+        >
+      {/if}
+    {:else}
+      {#if details.permissions.canChangePicture}
+        <div class="picture">
+          <PlainButton onclick={() => picker?.click()}>{t('room.manage.changePicture')}</PlainButton>
+          {#if details.avatarUrl}
+            <PlainButton danger onclick={() => void details.setPicture(null)}>{t('room.manage.removePicture')}</PlainButton>
+          {/if}
+          <input bind:this={picker} type="file" accept="image/*" hidden onchange={picked} />
+        </div>
+      {/if}
+      {#if details.permissions.canRename}
+        <TextField bind:value={name} label={t('room.manage.nameHeader')} showLabel placeholder={t('room.manage.namePlaceholder')} />
+      {/if}
+      {#if details.permissions.canChangeTopic}
+        <div class="field">
+          <label for="{id}-topic">{t('room.about')}</label>
+          <textarea id="{id}-topic" bind:value={topic} rows="3" placeholder={t('room.manage.topicPlaceholder')}></textarea>
+        </div>
+      {/if}
+      {#if details.permissions.canChangeVisibility}
+        <label class="toggle">
+          <input type="checkbox" bind:checked={isOpen} />
+          <span>
+            <strong>{t('room.manage.openToAnyone')}</strong>
+            <span class="help">{t('room.manage.openToAnyoneHelp')}</span>
+            {#if isOpen && details.encrypted}<span class="help">{t('roomList.new.openMeansUnencrypted')}</span>{/if}
+          </span>
+        </label>
+      {/if}
     {/if}
     {#if details.failure}
       <p class="problem" role="alert">{t(`roomAction.${details.failure}Failed`)}</p>
@@ -141,6 +165,7 @@
     gap: var(--space-tight);
   }
   .help {
+    margin: 0;
     font-size: var(--font-size-caption);
     color: var(--color-text-secondary);
   }

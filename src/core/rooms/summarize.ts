@@ -13,6 +13,8 @@ export interface SummaryContext {
   mutedRooms: Set<string>;
   /** Заблокированные: их сообщение не становится превью. */
   blocked: Set<string>;
+  /** Как *я* зову собеседника на этом устройстве (`LocalNames`) — только личные чаты. */
+  localName?: (roomId: string) => string | undefined;
 }
 
 const MARKED_UNREAD = ['m.marked_unread', 'com.famedly.marked_unread'];
@@ -36,6 +38,7 @@ export function summarize(room: Room, context: SummaryContext): RoomSummary | un
   // Имя и картинка личного чата — от собеседника, и падают на него вместе.
   const explicitName = stateContent(room, EventType.RoomName)?.['name'];
   const name =
+    (kind === 'direct' ? context.localName?.(room.roomId) : undefined) ||
     (typeof explicitName === 'string' && explicitName.trim()) ||
     room.getCanonicalAlias() ||
     (partner ? displayName(partner) : undefined) ||

@@ -36,6 +36,7 @@ import { fromBase64 } from '../storage/secretBox';
 import { vault, type Account, type AccountSecrets } from '../storage/vault';
 import { quietLogger } from '../support/logger';
 import { BlockList } from './blockList.svelte.ts';
+import { LocalNames } from '../rooms/localNames.svelte.ts';
 
 export type Connection = 'connecting' | 'online' | 'offline';
 
@@ -84,6 +85,8 @@ export class UserSession {
   readonly verification: VerificationStore | null;
   /** Заблокированные — игнор-список аккаунта. */
   readonly blocked: BlockList;
+  /** Как я зову собеседников на этом устройстве. */
+  readonly localNames: LocalNames;
   private readonly client: MatrixClient;
   private readonly account: Account;
   private readonly detach: Array<() => void> = [];
@@ -93,7 +96,8 @@ export class UserSession {
     this.client = client;
     this.account = account;
     this.userId = account.userId;
-    this.rooms = new RoomListStore(client);
+    this.localNames = new LocalNames(account.userId);
+    this.rooms = new RoomListStore(client, this.localNames);
     this.thumbnails = new ThumbnailCache({
       httpUrl: (mxc, size) => client.mxcUrlToHttp(mxc, size, size, 'crop', false, true, true),
       accessToken: () => client.getAccessToken(),
@@ -170,7 +174,7 @@ export class UserSession {
 
   /** «О чате» комнаты. Живёт, пока открыта панель: тот, кто открыл, и `destroy()`. */
   roomDetails(roomId: string): RoomDetailsStore {
-    return new RoomDetailsStore(this.client, roomId, (id) => this.rooms.get(id)?.kind === 'direct');
+    return new RoomDetailsStore(this.client, roomId, (id) => this.rooms.get(id)?.kind === 'direct', this.localNames);
   }
 
   createDirect(userId: string): Promise<string> {
@@ -304,6 +308,8 @@ export class UserSession {
 
     const session = new UserSession(client, account, keys);
     session.listen(events);
+    // До синхронизации: иначе список на миг покажет `anna_1987`, а потом «Маму».
+    await session.localNames.load();
     await client.startClient({
       initialSyncLimit: 20,
       lazyLoadMembers: true,

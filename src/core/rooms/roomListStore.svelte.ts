@@ -18,6 +18,7 @@ import {
   type RoomState,
 } from 'matrix-js-sdk';
 import { badgeCount, organize, type Organized } from './organize';
+import type { LocalNameSource } from './localNames.svelte.ts';
 import { mutedRoomIds } from './pushRules';
 import { spaceChildren, summarize, type SummaryContext } from './summarize';
 import type { RoomSummary } from './types';
@@ -39,9 +40,15 @@ export class RoomListStore {
   private context: SummaryContext;
   private readonly detach: Array<() => void> = [];
 
-  constructor(private readonly client: MatrixClient) {
+  constructor(
+    private readonly client: MatrixClient,
+    private readonly localNames?: LocalNameSource,
+  ) {
     this.context = this.buildContext();
     this.listen();
+    if (localNames) {
+      this.detach.push(localNames.onChange((roomId) => (roomId ? this.mark(roomId) : this.markAll())));
+    }
     this.flush();
   }
 
@@ -58,6 +65,7 @@ export class RoomListStore {
       mutedRooms: mutedRoomIds(this.client.pushRules),
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- снимок, как и весь контекст
       blocked: new Set(this.client.getIgnoredUsers()),
+      ...(this.localNames ? { localName: (roomId: string) => this.localNames!.get(roomId) } : {}),
     };
   }
 

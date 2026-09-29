@@ -198,3 +198,37 @@ test('«О чате»: вкладки «Что внутри» — фото, фа
   await expect(viewer).toBeHidden();
   expect(problems).toEqual([]);
 });
+
+test('локальное имя личного чата: видно везде, переживает перезагрузку, возвращается', async ({ page }) => {
+  const problems = watchForProblems(page);
+  await signInToDemo(page);
+  await openRoom(page, /^Аня/);
+  let panel = await openPanel(page);
+  await panel.getByRole('button', { name: 'Изменить' }).click();
+  const edit = page.getByRole('dialog', { name: 'Изменить чат' });
+  // В личном чате — одно поле; имя, описание и фото комнаты принадлежат собеседнику.
+  await expect(edit.getByRole('textbox')).toHaveCount(1);
+  const field = edit.getByRole('textbox', { name: 'Имя на этом устройстве' });
+  await expect(field).toHaveAttribute('placeholder', 'Аня');
+  await field.fill('Анечка');
+  await edit.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(edit).toBeHidden();
+  await expect(panel.getByRole('heading', { name: 'Анечка' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'О чате' })).toBeVisible({ timeout: 15_000 });
+  // И в списке, и в шапке чата.
+  await openRoom(page, /^Анечка/);
+  await expect(page.getByRole('heading', { name: 'Анечка', level: 1 })).toBeVisible();
+
+  panel = await openPanel(page);
+  await panel.getByRole('button', { name: 'Изменить' }).click();
+  await page.getByRole('dialog', { name: 'Изменить чат' }).getByRole('button', { name: 'Вернуть настоящее имя' }).click();
+  await expect(panel.getByRole('heading', { name: 'Аня' })).toBeVisible();
+  // На телефоне панель — лист поверх чата: сначала закрыть её.
+  await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  const back = page.getByRole('button', { name: 'Назад' });
+  if (await back.isVisible()) await back.click();
+  await expect(page.getByRole('link', { name: /^Аня/ })).toBeVisible();
+  expect(problems).toEqual([]);
+});

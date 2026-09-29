@@ -60,8 +60,9 @@
   let roleFor = $state<MemberSummary | null>(null);
   let memberMenu = $state<{ member: MemberSummary; at: { x: number; y: number } } | null>(null);
 
+  // В личном чате изменить можно всегда — одно: как вы зовёте собеседника на этом устройстве.
   const canEdit = $derived(
-    !!details && (details.permissions.canRename || details.permissions.canChangeTopic || details.permissions.canChangePicture || details.permissions.canChangeVisibility),
+    !!details && (details.direct || details.permissions.canRename || details.permissions.canChangeTopic || details.permissions.canChangePicture || details.permissions.canChangeVisibility),
   );
 
   // Кэш фото участников на время жизни панели.

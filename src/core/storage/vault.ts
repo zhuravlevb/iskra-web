@@ -7,14 +7,18 @@
  *
  * Черновики — здесь же, под тем же ключом: черновик — это текст сообщения, и лежать на
  * диске открытым ему не положено больше, чем токену. Уходят вместе с аккаунтом.
+ *
+ * Локальные имена личных чатов («Мама» вместо `anna_1987`) — так же: по чату, под ключом
+ * аккаунта, и уходят вместе с ним. Это чьи-то личные заметки о людях, с которыми он говорит.
  */
 import { deleteDatabase, openDatabase, transact } from './idb';
 import { createSealingKey, randomBase64, seal, unseal, type Sealed } from './secretBox';
 
 const DB_NAME = 'iskra-accounts';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const ACCOUNTS = 'accounts';
 const DRAFTS = 'drafts';
+const LOCAL_NAMES = 'localNames';
 
 export type SignInMethod = 'password' | 'sso' | 'oauth' | 'demo';
 
@@ -42,13 +46,14 @@ export interface Account {
   signedInAt: number;
 }
 
+/** Черновик или локальное имя: запись по чату, под ключом аккаунта. */
 interface StoredDraft {
   userId: string;
   roomId: string;
   sealed: Sealed;
 }
 
-/** Все черновики одного аккаунта — диапазон составного ключа `[userId, roomId]`. */
+/** Все записи одного аккаунта — диапазон составного ключа `[userId, roomId]`. */
 const draftsOf = (userId: string) => IDBKeyRange.bound([userId, ''], [userId, '\uffff']);
 
 interface StoredAccount extends Account {
@@ -62,6 +67,7 @@ function open(): Promise<IDBDatabase> {
   return openDatabase(DB_NAME, DB_VERSION, (db) => {
     if (!db.objectStoreNames.contains(ACCOUNTS)) db.createObjectStore(ACCOUNTS, { keyPath: 'userId' });
     if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS, { keyPath: ['userId', 'roomId'] });
+    if (!db.objectStoreNames.contains(LOCAL_NAMES)) db.createObjectStore(LOCAL_NAMES, { keyPath: ['userId', 'roomId'] });
   });
 }
 
@@ -124,6 +130,7 @@ export const vault = {
   async remove(userId: string): Promise<void> {
     await withDb(async (db) => {
       await transact(db, DRAFTS, 'readwrite', (s) => s.delete(draftsOf(userId)));
+      await transact(db, LOCAL_NAMES, 'readwrite', (s) => s.delete(draftsOf(userId)));
       await transact(db, ACCOUNTS, 'readwrite', (s) => s.delete(userId));
     });
   },
@@ -153,6 +160,38 @@ export const vault = {
       const sealed = await seal(account.key, text);
       const draft: StoredDraft = { userId, roomId, sealed };
       await transact(db, DRAFTS, 'readwrite', (s) => s.put(draft));
+    });
+  },
+
+  /** Локальные имена аккаунта: чат → имя. Не расшифровалось — этого имени нет. */
+  async localNames(userId: string): Promise<Record<string, string>> {
+    return withDb(async (db) => {
+      const [account, rows] = await Promise.all([
+        transact(db, ACCOUNTS, 'readonly', (s) => s.get(userId) as IDBRequest<StoredAccount | undefined>),
+        transact(db, LOCAL_NAMES, 'readonly', (s) => s.getAll(draftsOf(userId)) as IDBRequest<StoredDraft[]>),
+      ]);
+      const names: Record<string, string> = {};
+      if (!account) return names;
+      for (const row of rows) {
+        const name = await unseal<string>(account.key, row.sealed).catch(() => '');
+        if (name) names[row.roomId] = name;
+      }
+      return names;
+    });
+  },
+
+  /** Пустое имя — имени нет: запись удаляется. */
+  async saveLocalName(userId: string, roomId: string, name: string): Promise<void> {
+    await withDb(async (db) => {
+      if (!name.trim()) {
+        await transact(db, LOCAL_NAMES, 'readwrite', (s) => s.delete([userId, roomId]));
+        return;
+      }
+      const account = await transact(db, ACCOUNTS, 'readonly', (s) => s.get(userId) as IDBRequest<StoredAccount | undefined>);
+      if (!account) return;
+      const sealed = await seal(account.key, name.trim());
+      const row: StoredDraft = { userId, roomId, sealed };
+      await transact(db, LOCAL_NAMES, 'readwrite', (s) => s.put(row));
     });
   },
 
