@@ -535,7 +535,7 @@ export class DemoHomeserver {
           limited: start > 0,
           prev_batch: `t${start}`,
         },
-        ephemeral: { events: room.readUpTo ? [receiptEvent(room.readUpTo)] : [] },
+        ephemeral: { events: [...(room.readUpTo ? [receiptEvent(room.readUpTo)] : []), ...othersRead(room.timeline)] },
         account_data: { events: room.tags ? [{ type: 'm.tag', content: { tags: room.tags } }] : [] },
         unread_notifications: {
           notification_count: room.unread?.notifications ?? 0,
@@ -982,6 +982,24 @@ export class DemoHomeserver {
       ...(start === 0 ? { state: room.state.map((e) => withDefaults(e)) } : {}),
     });
   }
+}
+
+/**
+ * Квитанции собеседников: кто написал, тот прочитал всё до своего сообщения включительно —
+ * квитанция на его последнем. Так в демо видно «прочитано» у своих сообщений.
+ */
+function othersRead(timeline: readonly { sender?: string; event_id?: string; type?: string }[]) {
+  const last = new Map<string, string>();
+  for (const event of timeline) {
+    if (event.type === 'm.room.message' && event.sender && event.event_id && event.sender !== demoUsers.alice) last.set(event.sender, event.event_id);
+  }
+  if (!last.size) return [];
+  const content: Record<string, { 'm.read': Record<string, { ts: number }> }> = {};
+  for (const [userId, eventId] of last) {
+    content[eventId] ??= { 'm.read': {} };
+    content[eventId]['m.read'][userId] = { ts: Date.now() };
+  }
+  return [{ type: 'm.receipt', content }];
 }
 
 function receiptEvent(eventId: string) {

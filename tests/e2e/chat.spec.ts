@@ -69,7 +69,8 @@ test('ответ и правка: полоса над полем, ↑ берёт
   await expect(field).toHaveValue('А я — мангал');
   await field.fill('А я — мангал и угли');
   await page.getByRole('button', { name: 'Отправить' }).click();
-  await expect(bubble(page, 'А я — мангал и угли')).toContainText('изменено', { timeout: 10_000 });
+  // «изменено» — рядом с пузырём, в колонке отметок, как в нативной Искре.
+  await expect(page.getByRole('log').locator('.row').filter({ hasText: 'А я — мангал и угли' })).toContainText('изменено', { timeout: 10_000 });
   await expect(field).toHaveValue('');
 });
 
@@ -228,4 +229,21 @@ test('геопозиция: из меню скрепки, с честной то
   await expect(card).toContainText('± 1,2 км');
   await expect(card.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', /mlat=55\.755831&mlon=37\.617673/);
   await expect(page.getByRole('img', { name: 'Отправляется' })).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('отметки — рядом с пузырём: «глаз» у самого нового прочитанного своего, галочка — у ещё не прочитанного', async ({ page }) => {
+  await signInToDemo(page);
+  await openRoom(page, /^Аня/);
+  const log = page.getByRole('log');
+  // Аня ответила после «Поеду!» — значит, прочитала его и всё выше; «глаз» — только у него.
+  await expect(log.getByRole('img', { name: 'Прочитано' })).toHaveCount(1);
+  const read = log.locator('.row').filter({ hasText: 'Поеду! Во сколько?' });
+  await expect(read.getByRole('img', { name: 'Прочитано' })).toBeVisible();
+  // Время — не в пузыре.
+  await expect(bubble(page, 'Поеду! Во сколько?').locator('time')).toHaveCount(0);
+
+  await page.getByRole('textbox', { name: 'Сообщение' }).fill('Беру термос');
+  await page.getByRole('button', { name: 'Отправить' }).click();
+  const mine = log.locator('.row').filter({ hasText: 'Беру термос' });
+  await expect(mine.getByRole('img', { name: 'Отправлено' })).toBeVisible({ timeout: 10_000 });
 });

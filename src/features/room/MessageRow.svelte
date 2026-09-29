@@ -140,22 +140,24 @@
           {:else}
             <span class="label">{attachmentLabel(kind)}</span>
           {/if}
-          <span class="meta">
-            {#if message.pinned}
-              <svg class="pin" viewBox="0 0 24 24" role="img" aria-label={t('room.pinned')}><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7" /></svg>
-            {/if}
-            {#if message.edited}<span>{t('message.edited')}</span>{/if}
-            {#if message.delivery.state === 'sending'}
-              <svg class="sending" viewBox="0 0 24 24" role="img" aria-label={t('message.delivery.sending')}>
-                <circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" />
-              </svg>
-            {:else if failed}
-              <svg class="failed" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 16.5v.01" /></svg>
-            {/if}
-            <time>{clock(message.ts, i18n.locale)}</time>
-          </span>
         </span>
       </div>
+      <!-- Время, «изменено», закреп и доставка — рядом с пузырём, а не в его углу, как
+           `MessageMarks` нативной Искры: в углу время дерётся с последней строкой за место. -->
+      <span class="marks">
+        {#if message.pinned}
+          <svg class="pin" viewBox="0 0 24 24" role="img" aria-label={t('room.pinned')}><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7" /></svg>
+        {/if}
+        {#if message.edited}<span>{t('message.edited')}</span>{/if}
+        <time>{clock(message.ts, i18n.locale)}</time>
+        {#if message.delivery.state === 'sending'}
+          <svg viewBox="0 0 24 24" role="img" aria-label={t('message.delivery.sending')}><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>
+        {:else if message.own && message.readMark}
+          <svg viewBox="0 0 24 24" role="img" aria-label={t('message.delivery.read')}><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></svg>
+        {:else if message.own && !message.read && message.delivery.state === 'sent' && message.eventId}
+          <svg viewBox="0 0 24 24" role="img" aria-label={t('message.delivery.sent')}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        {/if}
+      </span>
         {#if interactive && viewport.finePointer}
           <!-- Панель по наведению. В порядке табуляции — только «ещё»: остальное есть в меню,
                а три остановки на каждом из сотен сообщений сделали бы Tab бесполезным. -->
@@ -301,30 +303,33 @@
     font-weight: 600;
     opacity: 0.8;
   }
-  /* Время и пометки — в конце последней строки текста, если там есть место. */
-  .meta {
-    float: inline-end;
+  /* Отметки — серой колонкой у пузыря, по его нижнему краю: у чужого — справа, у своего —
+     слева. Никогда не сжимают пузырь. */
+  .marks {
     display: inline-flex;
+    flex: none;
     align-items: center;
     gap: var(--space-tight);
-    margin-inline-start: var(--space-close);
-    margin-block-start: var(--space-tight);
+    padding-block-end: var(--space-tight);
     font-size: var(--font-size-caption);
     line-height: 1.2;
-    opacity: 0.7;
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .meta svg {
+  .marks svg {
     width: var(--font-size-caption);
     height: var(--font-size-caption);
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
     stroke-linecap: round;
+    stroke-linejoin: round;
   }
-  .meta .failed {
-    color: var(--color-danger);
-    opacity: 1;
+  :global([data-wallpaper]) .marks {
+    padding: var(--space-within-run) var(--space-close);
+    border-radius: var(--radius-circle);
+    background: var(--color-incoming-bubble);
   }
   /* Компактный: без пузыря, во всю ширину, лицо — сверху серии. */
   .row.compact {
@@ -340,9 +345,12 @@
   :global([data-wallpaper]) .compact .sender {
     margin-inline-start: 0;
   }
-  .compact .bubble-wrap,
-  .compact .bubble {
+  .compact .bubble-wrap {
     width: 100%;
+  }
+  /* Строка — во всю ширину, отметки — в конце неё. */
+  .compact .bubble {
+    flex: 1;
   }
   .compact .bubble:not(.visual) {
     padding: 0;
@@ -405,9 +413,6 @@
     display: block;
     padding: var(--space-tight) var(--space-close) 0;
   }
-  .bubble.visual .meta {
-    margin-inline-end: var(--space-close);
-  }
   /* Стикер и «кружочек» — без пузыря: у них своя форма. */
   .bubble.bare,
   .own .bubble.bare {
@@ -418,9 +423,15 @@
   .bubble-wrap {
     position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: inherit;
+    align-items: flex-end;
+    gap: var(--space-close);
     max-width: 100%;
+    min-width: 0;
+  }
+  .own .bubble-wrap {
+    flex-direction: row-reverse;
+  }
+  .bubble-wrap > .bubble {
     min-width: 0;
   }
   /* Сбоку от пузыря, по его середине, — в пустоте ленты: не закрывает ни имя, ни текст,
@@ -467,8 +478,7 @@
   .hover-bar button:hover {
     background: var(--color-selected);
   }
-  .hover-bar svg,
-  .meta .pin {
+  .hover-bar svg {
     width: var(--size-icon);
     height: var(--size-icon);
     fill: none;
@@ -476,10 +486,6 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-  }
-  .meta .pin {
-    width: var(--font-size-caption);
-    height: var(--font-size-caption);
   }
   /* HTML сообщения: разметка Matrix, но в масштабе пузыря. */
   .html :global(p),

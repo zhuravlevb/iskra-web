@@ -123,26 +123,15 @@
 </script>
 
 <!--
-  Лицо чата в шапке — оно же «О чате», как `RoomAvatarButton` / `RoomHeader` нативной
-  Искры: на широком экране — у левого края рядом с именем, на телефоне — справа, под
-  большим пальцем, а имя — в середине. Пока сводки комнаты нет — прежний значок.
+  Лицо чата в шапке — рядом с именем, на любой ширине. Нажимается и оно (к «О чате»), но
+  кнопка для этого одна — ⓘ справа: лицо скринридеру не показываем, чтобы «О чате» не было
+  двумя одинаковыми кнопками подряд, и в Tab его нет.
 -->
 {#snippet face()}
   {#if room}
-    <button
-      type="button"
-      class="room-face"
-      aria-label={t('room.info')}
-      aria-pressed={panelOpen}
-      title={t('room.info')}
-      onclick={() => (panelOpen = !panelOpen)}
-    >
+    <button type="button" class="room-face" aria-hidden="true" tabindex="-1" onclick={() => (panelOpen = !panelOpen)}>
       <RoomFace {room} {session} />
     </button>
-  {:else}
-    <IconButton label={t('room.info')} pressed={panelOpen} onclick={() => (panelOpen = !panelOpen)}>
-      <Icon name="info" />
-    </IconButton>
   {/if}
 {/snippet}
 
@@ -182,12 +171,13 @@
         {#snippet leading()}
           {#if viewport.layout === 'stack'}
             <IconButton label={t('room.back')} onclick={closeRoom}><Icon name="back" /></IconButton>
-          {:else}
-            {@render face()}
           {/if}
+          {@render face()}
         {/snippet}
         {#snippet trailing()}
-          {#if viewport.layout === 'stack'}{@render face()}{/if}
+          <IconButton label={t('room.info')} pressed={panelOpen} onclick={() => (panelOpen = !panelOpen)}>
+            <Icon name="info" />
+          </IconButton>
         {/snippet}
       </Bar>
       {#key roomId}
@@ -268,15 +258,10 @@
     cursor: pointer;
     --size-room-avatar: var(--size-avatar-toolbar);
   }
-  /* Наведение и «открыто» — подложкой, как у кнопки-значка: кольцо вокруг грозди лиц
-     группы легло бы криво. */
   @media (hover: hover) {
     .room-face:hover {
       background: var(--color-incoming-bubble);
     }
-  }
-  .room-face[aria-pressed='true'] {
-    background: var(--color-own-reaction);
   }
   .main-column {
     display: flex;

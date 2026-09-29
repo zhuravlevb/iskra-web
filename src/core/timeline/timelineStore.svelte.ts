@@ -137,6 +137,7 @@ export class TimelineStore {
     on(RoomEvent.Timeline, (_e: MatrixEvent, room: Room | undefined) => mine(room) && this.schedule());
     on(RoomEvent.LocalEchoUpdated, (_e: MatrixEvent, room: Room) => mine(room) && this.schedule());
     on(RoomEvent.Redaction, (_e: MatrixEvent, room: Room) => mine(room) && this.schedule());
+    on(RoomEvent.Receipt, (_e: MatrixEvent, room: Room) => mine(room) && this.schedule());
     on(RoomEvent.TimelineReset, (room: Room | undefined) => {
       if (!mine(room)) return;
       // Сервер прислал «слишком много пропущено» — живая лента начата заново. Старые
@@ -200,6 +201,7 @@ export class TimelineStore {
       const message = mapEvent(event, context);
       if (message) messages.push(message);
     }
+    markRead(room, this.ownUserId, messages);
     this.messages = messages;
     this.items = layout(messages);
     this.readPinnedMessage(room, context);
@@ -677,4 +679,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       },
     );
   });
+}
+
+/**
+ * Что из своего прочитано — по квитанциям собеседников. Квитанция говорит «прочитал досюда»,
+ * значит, прочитано и всё своё выше. Поэтому — снизу вверх до первого прочитанного: оно
+ * получает «глаз», всё своё выше — просто прочитано. Меняет сообщения на месте: они только
+ * что собраны этой пересборкой.
+ */
+function markRead(room: Room, ownUserId: string, messages: Message[]): void {
+  const others = room.getJoinedMembers().filter((m) => m.userId !== ownUserId);
+  if (!others.length) return;
+  let read = false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    if (!message.own || !message.eventId || message.delivery.state !== 'sent') continue;
+    if (!read) {
+      read = others.some((m) => room.hasUserReadEvent(m.userId, message.eventId!));
+      if (read) message.readMark = true;
+    }
+    if (read) message.read = true;
+  }
 }
