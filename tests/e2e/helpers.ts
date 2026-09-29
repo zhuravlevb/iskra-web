@@ -47,7 +47,11 @@ function recordConsole(page: Page): string[] {
     page.on('request', (r) => open.add(r.url()));
     page.on('requestfinished', (r) => {
       open.delete(r.url());
-      void r.response().then((response) => seen.push(`${response?.status() ?? '—'} ${r.url()}`));
+      // Страница могла закрыться раньше, чем пришёл ответ, — это конец теста, а не ошибка.
+      r.response().then(
+        (response) => seen.push(`${response?.status() ?? '—'} ${r.url()}`),
+        () => {},
+      );
     });
     page.on('requestfailed', (r) => open.delete(r.url()));
   }
