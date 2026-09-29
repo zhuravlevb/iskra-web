@@ -30,6 +30,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { sendAttachment, uploadClientFor, type OutgoingFile, type UploadClient } from '../media/upload';
+import { geoUri, type Place } from './location';
 import { mapEvent, type MapperContext } from './mapper';
 import { layout, type TimelineItem } from './layout';
 import type { Message, Reaction } from './message';
@@ -376,6 +377,26 @@ export class TimelineStore {
       content['m.mentions'] = replyTo.own ? {} : { user_ids: [replyTo.senderId] };
     }
     // Промис не ждём: неудача видна в самом сообщении («Не отправлено»), а не исключением.
+    this.client.sendMessage(this.roomId, content as never).catch(() => this.schedule());
+    this.schedule();
+  }
+
+  /**
+   * Своё место. `body` — для клиентов, которые `m.location` не знают: там будет виден
+   * `geo:`-адрес, а по нему уже можно открыть карту. MSC3488 — рядом, как шлёт Element.
+   */
+  sendLocation(place: Place, description: string): void {
+    this.typingStopped();
+    const uri = geoUri(place);
+    const content = {
+      msgtype: 'm.location',
+      body: `${description} ${uri}`,
+      geo_uri: uri,
+      'org.matrix.msc3488.location': { uri, description },
+      'org.matrix.msc3488.asset': { type: 'm.self' },
+      'org.matrix.msc3488.ts': Date.now(),
+      'org.matrix.msc1767.text': `${description} ${uri}`,
+    };
     this.client.sendMessage(this.roomId, content as never).catch(() => this.schedule());
     this.schedule();
   }

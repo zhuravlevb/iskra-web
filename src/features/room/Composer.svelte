@@ -12,6 +12,7 @@
   «Стекло» — навигационный слой: полупрозрачность и размытие, где браузер их тянет.
 -->
 <script lang="ts">
+  import Menu from '../../design/Menu.svelte';
   import { viewport } from '../../design/viewport.svelte.ts';
   import { t } from '../../i18n/index.svelte.ts';
   import type { OutgoingFile } from '../../core/media/upload';
@@ -33,6 +34,8 @@
     /** Выбрали, вставили или перетащили файлы. */
     onfiles?: (files: File[]) => void;
     onremoveattachment?: (index: number) => void;
+    /** «Геопозиция» в меню скрепки. */
+    onlocation?: () => void;
     disabled?: boolean;
   }
   let {
@@ -45,8 +48,25 @@
     attachments = [],
     onfiles,
     onremoveattachment,
+    onlocation,
     disabled = false,
   }: Props = $props();
+
+  /** Меню скрепки — как «+» нативной Искры: фото, файл, место. */
+  let attachMenu = $state<{ x: number; y: number } | null>(null);
+
+  function openAttachMenu(event: MouseEvent) {
+    if (!canAttach) return;
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    attachMenu = { x: rect.left, y: rect.top };
+  }
+
+  /** Пункт меню: закрыть — и выбрать. Фото — с фильтром, файл — любой. */
+  function choose(accept: string) {
+    attachMenu = null;
+    if (picker) picker.accept = accept;
+    picker?.click();
+  }
 
   let field: HTMLTextAreaElement | undefined = $state();
   let picker: HTMLInputElement | undefined = $state();
@@ -116,9 +136,11 @@
     send();
   }
 
-  /** `Ctrl/⌘ Shift U` и кнопка-скрепка. */
+  /** `Ctrl/⌘ Shift U` — сразу выбор файла, мимо меню: сочетание клавиш не переспрашивает. */
   export function attach() {
-    if (canAttach) picker?.click();
+    if (!canAttach) return;
+    if (picker) picker.accept = '';
+    picker?.click();
   }
 
   /** Вставка из буфера: файлы — во вложения, текст — как обычно. */
@@ -170,7 +192,7 @@
   }}
 >
   {#if onfiles}
-    <button type="button" class="attach" disabled={!canAttach} aria-label={t('room.attach')} title={t('room.attach')} onclick={attach}>
+    <button type="button" class="attach" disabled={!canAttach} aria-label={t('room.attach')} title={t('room.attach')} aria-haspopup="menu" onclick={openAttachMenu}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7" /></svg>
     </button>
     <input bind:this={picker} type="file" multiple hidden onchange={picked} />
@@ -191,6 +213,21 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
   </button>
 </form>
+
+<Menu open={!!attachMenu} x={attachMenu?.x ?? 0} y={attachMenu?.y ?? 0} sheet={!viewport.finePointer} label={t('room.attach')} onclose={() => (attachMenu = null)}>
+  <button type="button" role="menuitem" onclick={() => choose('image/*,video/*')}>{t('room.attachPhoto')}</button>
+  <button type="button" role="menuitem" onclick={() => choose('')}>{t('room.attachFile')}</button>
+  {#if onlocation}
+    <button
+      type="button"
+      role="menuitem"
+      onclick={() => {
+        attachMenu = null;
+        onlocation?.();
+      }}>{t('location.attach')}</button
+    >
+  {/if}
+</Menu>
 </div>
 
 <style>

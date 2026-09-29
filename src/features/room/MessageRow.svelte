@@ -27,6 +27,7 @@
   import { matrixHtml } from './html';
   import LinkedText from './LinkedText.svelte';
   import PollView from './PollView.svelte';
+  import LocationCard from './LocationCard.svelte';
   import FileCard from '../media/FileCard.svelte';
   import MediaPreview from '../media/MediaPreview.svelte';
   import type { MediaLoader } from '../../core/media/media';
@@ -134,6 +135,8 @@
           {:else if kind.type === 'file' || kind.type === 'audio' || kind.type === 'voice'}
             <FileCard kind={kind.type} attachment={kind.attachment} {media} />
             {#if kind.attachment.caption}<span class="caption text"><LinkedText text={kind.attachment.caption} /></span>{/if}
+          {:else if kind.type === 'location'}
+            <LocationCard place={kind.place} />
           {:else}
             <span class="label">{attachmentLabel(kind)}</span>
           {/if}

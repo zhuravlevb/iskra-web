@@ -1,3 +1,5 @@
+import type { Place } from './location';
+
 /**
  * Сообщение — так, как его видит лента. Свой тип, а не `MatrixEvent` (см. план,
  * «Архитектура»); строится `TimelineMapper` и только им.
@@ -76,7 +78,8 @@ export type MessageKind =
   | { type: 'emote'; body: string; html?: string }
   | { type: 'notice'; body: string; html?: string }
   | { type: 'image' | 'sticker' | 'video' | 'videoNote' | 'voice' | 'audio' | 'file'; attachment: Attachment }
-  | { type: 'location'; body: string; uri: string }
+  /** Место — уже разобранное и проверенное: широта 900 сюда не доходит (`location.ts`). */
+  | { type: 'location'; body: string; uri: string; place: Place }
   | { type: 'poll'; poll: Poll }
   | { type: 'service'; event: ServiceEvent }
   | { type: 'deleted' }

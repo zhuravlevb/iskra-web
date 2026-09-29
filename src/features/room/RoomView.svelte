@@ -24,6 +24,8 @@
   import { typingText } from './text';
   import Timeline from './Timeline.svelte';
   import WallpaperBackdrop from './WallpaperBackdrop.svelte';
+  import { distance } from './distance';
+  import type { Place } from '../../core/timeline/location';
   import { preferences } from '../app/preferences.svelte.ts';
 
   interface Props {
@@ -50,7 +52,35 @@
   let blocking = $state<Message | null>(null);
   let attachments = $state<OutgoingFile[]>([]);
   let dropping = $state(false);
-  let tooLarge = $state('');
+  /** Строка над полем: не влезло в лимит, не нашли место — сказать и дать закрыть. */
+  let notice = $state('');
+  /** Место, которое браузер назвал, — ждёт «Отправить». */
+  let placing = $state<Place | null>(null);
+  let locating = $state(false);
+
+  /**
+   * Где я. Браузер спросит разрешение сам — при первом нажатии, а не при входе: вопрос без
+   * повода получает «нет» навсегда. Точность — из ответа, и она идёт в вопрос перед отправкой:
+   * без GPS место по сети бывает мимо на город, и человек должен это знать до, а не после.
+   */
+  function locate() {
+    if (!navigator.geolocation || locating) return;
+    locating = true;
+    notice = '';
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        locating = false;
+        notice = '';
+        const { latitude, longitude, accuracy } = position.coords;
+        placing = { latitude, longitude, ...(Number.isFinite(accuracy) ? { accuracy } : {}) };
+      },
+      (error) => {
+        locating = false;
+        notice = error.code === error.PERMISSION_DENIED ? t('location.denied') : t('location.failed');
+      },
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
+    );
+  }
   let viewing = $state<{ items: ViewerItem[]; start: string } | null>(null);
 
   $effect(() => {
@@ -61,7 +91,7 @@
     context = null;
     stashed = '';
     attachments = [];
-    tooLarge = '';
+    notice = '';
     let loaded = false;
     void session.draft(id).then((draft) => {
       loaded = true;
@@ -140,10 +170,10 @@
     const limit = await session.uploadLimit();
     const fitting = files.filter((file) => {
       if (limit === undefined || file.size <= limit) return true;
-      tooLarge = t('upload.tooLarge', { name: file.name, limit: fileSize(limit, i18n.locale) });
+      notice = t('upload.tooLarge', { name: file.name, limit: fileSize(limit, i18n.locale) });
       return false;
     });
-    if (fitting.length === files.length) tooLarge = '';
+    if (fitting.length === files.length) notice = '';
     const prepared = await Promise.all(fitting.map(prepareFile));
     attachments = [...attachments, ...prepared];
   }
@@ -286,10 +316,10 @@
   {/if}
   <div class="below">
     <p class="typing" aria-live="polite">{showTyping ? typingLine : ''}</p>
-    {#if tooLarge}
+    {#if notice}
       <div class="failure" role="alert">
-        <span>{tooLarge}</span>
-        <button type="button" onclick={() => (tooLarge = '')}>{t('timeline.dismiss')}</button>
+        <span>{notice}</span>
+        <button type="button" onclick={() => (notice = '')}>{t('timeline.dismiss')}</button>
       </div>
     {/if}
     {#if store?.failure}
@@ -317,6 +347,7 @@
     {attachments}
     onfiles={(files) => void addFiles(files)}
     onremoveattachment={(index) => (attachments = attachments.filter((_, i) => i !== index))}
+    onlocation={locate}
   />
 </div>
 
@@ -337,6 +368,19 @@
   onconfirm={() => {
     if (deleting) store?.remove(deleting);
     deleting = null;
+  }}
+/>
+
+<ConfirmDialog
+  open={!!placing}
+  title={t('location.confirm')}
+  message={placing?.accuracy !== undefined ? t('location.accuracy', { distance: distance(placing.accuracy, i18n.locale) }) : t('location.accuracyUnknown')}
+  confirmLabel={t('location.send')}
+  cancelLabel={t('location.cancel')}
+  onclose={() => (placing = null)}
+  onconfirm={() => {
+    if (placing) store?.sendLocation(placing, t('location.title'));
+    placing = null;
   }}
 />
 

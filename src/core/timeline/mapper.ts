@@ -8,6 +8,7 @@
  */
 import { EventStatus, EventType, MsgType, type MatrixEvent } from 'matrix-js-sdk';
 import { isVideoNote } from '../rooms/preview';
+import { parseGeoUri } from './location';
 import type { Attachment, Delivery, EncryptedFileKey, MediaSource, Message, MessageKind, Poll, Reaction, ReplyPreview, SendFailure, ServiceEvent } from './message';
 
 export interface MapperContext {
@@ -118,8 +119,11 @@ function messageKind(event: MatrixEvent): MessageKind {
       return { type: content['org.matrix.msc3245.voice'] !== undefined ? 'voice' : 'audio', attachment: attachmentOf(content) };
     case MsgType.File:
       return { type: 'file', attachment: attachmentOf(content) };
-    case MsgType.Location:
-      return { type: 'location', body, uri: typeof content['geo_uri'] === 'string' ? content['geo_uri'] : '' };
+    case MsgType.Location: {
+      const uri = typeof content['geo_uri'] === 'string' ? content['geo_uri'] : '';
+      const place = parseGeoUri(uri);
+      return place ? { type: 'location', body, uri, place } : { type: 'unsupported' };
+    }
     default:
       // Неизвестный msgtype с телом — по спецификации показывается как текст.
       return body ? { type: 'text', body: text } : { type: 'unsupported' };

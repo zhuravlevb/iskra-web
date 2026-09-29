@@ -207,3 +207,25 @@ test('телефон: долгое нажатие открывает меню и
   await expect(menu).toBeVisible();
   await expect(page.getByRole('menu')).toHaveCount(1);
 });
+
+test('геопозиция: из меню скрепки, с честной точностью в вопросе — и карточкой в ленте', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 55.755831, longitude: 37.617673, accuracy: 1200 });
+  await signInToDemo(page);
+  await openRoom(page, /^Аня/);
+
+  await page.getByRole('button', { name: 'Добавить фото или файл' }).click();
+  const menu = page.getByRole('menu', { name: 'Добавить фото или файл' });
+  await expect(menu.getByRole('menuitem')).toHaveText(['Фото или видео', 'Файл', 'Геопозиция']);
+  await menu.getByRole('menuitem', { name: 'Геопозиция' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Отправить, где вы сейчас?' });
+  await expect(dialog).toContainText('около 1,2 км');
+  await dialog.getByRole('button', { name: 'Отправить' }).click();
+
+  const card = page.getByRole('log').getByRole('article').filter({ hasText: 'Геопозиция' }).last();
+  await expect(card).toContainText('55,75583');
+  await expect(card).toContainText('± 1,2 км');
+  await expect(card.getByRole('link', { name: 'OpenStreetMap' })).toHaveAttribute('href', /mlat=55\.755831&mlon=37\.617673/);
+  await expect(page.getByRole('img', { name: 'Отправляется' })).toHaveCount(0, { timeout: 10_000 });
+});
