@@ -12,6 +12,7 @@
   import RecoveryScreen from '../recovery/RecoveryScreen.svelte';
   import VerificationSheet from '../recovery/VerificationSheet.svelte';
   import { preferences } from './preferences.svelte.ts';
+  import { wallpaperPhoto } from './wallpaperPhoto.svelte.ts';
   import Welcome from '../onboarding/Welcome.svelte';
   import FirstRun from '../onboarding/FirstRun.svelte';
 
@@ -40,6 +41,11 @@
     // Возврат со страницы входа читается один раз.
     void app.boot(authCallback, { onFocusRequested: answerPing });
     return preferences.persist();
+  });
+
+  // Выход стёр своё фото на обоях с диска — и из памяти тоже: следующий здесь — другой человек.
+  $effect(() => {
+    if (app.phase.name === 'signed-out') wallpaperPhoto.forget();
   });
 
   $effect(() => {

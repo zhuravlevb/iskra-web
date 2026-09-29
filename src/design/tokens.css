@@ -64,6 +64,8 @@
   --size-sticker: 10rem; /* 160 */
   --size-video-note: 12.5rem; /* 200 — «кружочек» */
   --size-attachment-tile: 4.5rem; /* 72 — вложение в лотке над полем */
+  --size-wallpaper-tile-width: 3.5rem; /* 56 — плитка обоев: вытянута, как экран */
+  --size-wallpaper-tile-height: 5rem; /* 80 */
   --size-gallery-tile: 6rem; /* 96 — наименьшая клетка сетки «Фото и видео», как у RoomMediaGrid */
 
   /* Колонки. Список чатов — Theme.Size.sidebarMinimum/Ideal/Maximum. */
@@ -133,11 +135,15 @@
   --color-separator: rgb(60 60 67 / 0.29);
   --color-glass: rgb(255 255 255 / 0.72);
   --color-glass-opaque: #f9f9f9;
-  /* Color.primary.opacity(0.08) — incomingBubble */
   /* Нарисованная «фотография» в примере мордочек — оранжевый в розовый, как в нативной. */
   --color-photo-from: #ff9500;
   --color-photo-to: #ff2d55;
+  /* Color.primary.opacity(0.08) — incomingBubble */
   --color-incoming-bubble: rgb(0 0 0 / 0.08);
+  /* На обоях пузыри непрозрачные: восемь процентов чёрного поверх чужого отпуска — это отпуск
+     со словами поверх (`incomingBubbleOnWallpaper` / `ownBubbleOnWallpaper` нативной Искры). */
+  --color-incoming-bubble-on-wallpaper: #fcfcfc;
+  --color-mono-bubble-on-wallpaper: #dedede;
   --color-own-reaction: rgb(0 0 0 / 0.16);
   --color-danger: #ff3b30;
   --color-on-danger: #ffffff;
@@ -162,6 +168,8 @@
   --color-own-reaction: rgb(255 255 255 / 0.16);
   --color-danger: #ff453a;
   --color-selected: rgb(255 255 255 / 0.1);
+  --color-incoming-bubble-on-wallpaper: #2b2b2b;
+  --color-mono-bubble-on-wallpaper: #4d4d4d;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -178,6 +186,8 @@
     --color-own-reaction: rgb(255 255 255 / 0.16);
     --color-danger: #ff453a;
     --color-selected: rgb(255 255 255 / 0.1);
+    --color-incoming-bubble-on-wallpaper: #2b2b2b;
+    --color-mono-bubble-on-wallpaper: #4d4d4d;
   }
 }
 

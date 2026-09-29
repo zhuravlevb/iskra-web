@@ -18,6 +18,14 @@ export type FaceMode = (typeof faceModes)[number];
 export const fonts = ['inter', 'system'] as const;
 export type Font = (typeof fonts)[number];
 
+/** Обои — `Wallpaper` нативной Искры: ничего, шесть градиентов, своё фото. Одни на всё приложение. */
+export const wallpapers = ['none', 'sunset', 'sea', 'forest', 'dusk', 'sand', 'night', 'photo'] as const;
+export type Wallpaper = (typeof wallpapers)[number];
+/** Затемнение обоев: до 0.8 — дальше выбор становится чёрным экраном со слухами о картинке. */
+export const MAX_DIMMING = 0.8;
+/** Четверть: градиенту не нужно, фото обычно нужно, а с нуля своё фото сначала нечитаемо. */
+const DEFAULT_DIMMING = 0.25;
+
 /** Язык: как в браузере или выбранный вручную (план: «с выбором вручную в настройках»). */
 export type LanguageChoice = 'system' | Locale;
 
@@ -29,6 +37,8 @@ const keys = {
   font: 'appearance.font',
   language: 'language',
   welcomeSeen: 'onboarding.welcomeSeen',
+  wallpaper: 'appearance.wallpaper',
+  wallpaperDimming: 'appearance.wallpaperDimming',
 } as const;
 
 function read(key: string): string | null {
@@ -51,6 +61,11 @@ function oneOf<T extends string>(value: string | null, allowed: readonly T[], fa
   return allowed.find((a) => a === value) ?? fallback;
 }
 
+function dimming(value: string | null): number {
+  const n = value === null ? NaN : Number(value);
+  return Number.isFinite(n) ? Math.min(MAX_DIMMING, Math.max(0, n)) : DEFAULT_DIMMING;
+}
+
 class Preferences {
   accent = $state<Accent>(oneOf(read(keys.accent), accents, 'blue'));
   appearance = $state<Appearance>(oneOf(read(keys.appearance), ['system', 'light', 'dark'], 'system'));
@@ -64,6 +79,8 @@ class Preferences {
    * показанными (`Onboarding.welcomeSeenKey` нативной Искры).
    */
   welcomeSeen = $state<boolean>(read(keys.welcomeSeen) === '1');
+  wallpaper = $state<Wallpaper>(oneOf(read(keys.wallpaper), wallpapers, 'none'));
+  wallpaperDimming = $state<number>(dimming(read(keys.wallpaperDimming)));
 
   /** Пишет в хранилище и отражает на `<html>` всё, что изменилось. */
   persist(): () => void {
@@ -73,6 +90,8 @@ class Preferences {
       $effect(() => write(keys.listWidth, String(this.listWidth)));
       $effect(() => write(keys.faces, this.faces));
       $effect(() => write(keys.font, this.font));
+      $effect(() => write(keys.wallpaper, this.wallpaper));
+      $effect(() => write(keys.wallpaperDimming, String(this.wallpaperDimming)));
       $effect(() => {
         if (this.welcomeSeen) write(keys.welcomeSeen, '1');
       });

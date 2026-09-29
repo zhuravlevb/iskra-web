@@ -1,0 +1,24 @@
+/*
+ * Обои за перепиской — `Wallpaper` нативной Искры. Градиенты, а не картинки: две краски
+ * ничего не весят, растягиваются на любое окно и достаточно тихи, чтобы на них писать.
+ * Пары — свои, а не системные цвета: те настроены под кнопки, и две рядом дают фон,
+ * похожий на растянутую кнопку. Внизу темнее — там шапка и поле ввода.
+ *
+ * `data-wallpaper` на комнате: сам фон рисует `WallpaperBackdrop`, а здесь — то, что на нём
+ * стоит. Полупрозрачные заливки (входящий пузырь, плашка дня, реакции) на фото — это фото;
+ * на обоях они непрозрачные.
+ */
+
+[data-wallpaper-kind='sunset'] { --wallpaper-top: #fa8c59; --wallpaper-bottom: #8a3d78; }
+[data-wallpaper-kind='sea'] { --wallpaper-top: #5caddb; --wallpaper-bottom: #1a4785; }
+[data-wallpaper-kind='forest'] { --wallpaper-top: #82bd82; --wallpaper-bottom: #1c4f45; }
+[data-wallpaper-kind='dusk'] { --wallpaper-top: #7073bd; --wallpaper-bottom: #292654; }
+[data-wallpaper-kind='sand'] { --wallpaper-top: #edd9b3; --wallpaper-bottom: #a88261; }
+[data-wallpaper-kind='night'] { --wallpaper-top: #383d4d; --wallpaper-bottom: #0d0d17; }
+
+[data-wallpaper] {
+  --color-incoming-bubble: var(--color-incoming-bubble-on-wallpaper);
+}
+:root[data-accent='mono'] [data-wallpaper] {
+  --bubble-own: var(--color-mono-bubble-on-wallpaper);
+}

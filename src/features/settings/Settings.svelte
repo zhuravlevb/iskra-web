@@ -21,6 +21,7 @@
   import { fileSize } from '../media/files';
   import RecoveryCode from '../recovery/RecoveryCode.svelte';
   import AccentSwatches from './AccentSwatches.svelte';
+  import WallpaperPicker from './WallpaperPicker.svelte';
   import { Photo, pixelsFor } from '../rooms/faces.svelte.ts';
 
   let { session, section }: { session: UserSession; section?: SettingsSection } = $props();
@@ -277,6 +278,8 @@
     </div>
     <h3 id="accent-title">{t('appearance.accent')}</h3>
     <AccentSwatches labelledby="accent-title" />
+    <h3 id="wallpaper-title">{t('appearance.wallpaper')}</h3>
+    <WallpaperPicker labelledby="wallpaper-title" />
     <h3 id="font-title">{t('appearance.font')}</h3>
     <div class="options" role="radiogroup" aria-labelledby="font-title">
       {#each fonts as font (font)}

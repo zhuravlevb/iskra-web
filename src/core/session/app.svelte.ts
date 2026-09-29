@@ -22,6 +22,7 @@ import {
 } from '../storage/persistence';
 import { vault, type Account, type NewAccount } from '../storage/vault';
 import { SessionLock } from './lock';
+import { wallpaperPhoto } from '../storage/wallpaper';
 import { UserSession, wipeUserData } from './userSession.svelte.ts';
 
 export type Phase =
@@ -215,6 +216,7 @@ export class AppState {
     this.phase = { name: 'loading' };
     await session.signOut();
     await vault.remove(session.userId).catch(() => {});
+    await wallpaperPhoto.forget();
     this.releaseLock();
     this.phase = { name: 'signed-out' };
   }
@@ -225,6 +227,7 @@ export class AppState {
     const session = this.phase.session;
     await session.wipe();
     await vault.remove(session.userId).catch(() => {});
+    await wallpaperPhoto.forget();
     this.releaseLock();
     this.phase = { name: 'signed-out', ended: true };
   }

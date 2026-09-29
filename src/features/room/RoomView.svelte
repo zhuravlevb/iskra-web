@@ -23,6 +23,8 @@
   import PinnedStrip from './PinnedStrip.svelte';
   import { typingText } from './text';
   import Timeline from './Timeline.svelte';
+  import WallpaperBackdrop from './WallpaperBackdrop.svelte';
+  import { preferences } from '../app/preferences.svelte.ts';
 
   interface Props {
     session: UserSession;
@@ -255,7 +257,17 @@
   }
 </script>
 
-<div class="room" role="region" aria-label={t('room.timeline')} {ondragenter} {ondragover} {ondragleave} {ondrop}>
+<div
+  class="room"
+  role="region"
+  aria-label={t('room.timeline')}
+  data-wallpaper={preferences.wallpaper === 'none' ? undefined : ''}
+  {ondragenter}
+  {ondragover}
+  {ondragleave}
+  {ondrop}
+>
+  <WallpaperBackdrop />
   {#if dropping}
     <div class="drop" aria-hidden="true"><span>{t('room.dropToAttach')}</span></div>
   {/if}
@@ -345,6 +357,7 @@
 <style>
   .room {
     position: relative;
+    isolation: isolate;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -375,6 +388,13 @@
     margin: 0;
     font-size: var(--font-size-caption);
     color: var(--color-text-secondary);
+  }
+  /* На обоях — на плашке, как имя отправителя (см. MessageRow). Пустая строка плашки не рисует. */
+  [data-wallpaper] .typing:not(:empty) {
+    width: fit-content;
+    padding: 0 var(--space-close);
+    border-radius: var(--radius-circle);
+    background: var(--color-incoming-bubble);
   }
   .failure {
     display: flex;

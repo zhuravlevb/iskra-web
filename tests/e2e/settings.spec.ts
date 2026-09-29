@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { consoleOf, isPhone, signInToDemo, watchForProblems } from './helpers';
+import { consoleOf, isPhone, signInToDemo, signOut, watchForProblems } from './helpers';
 
 test.afterEach(async ({ page }, info) => {
   if (info.status !== info.expectedStatus) console.log(`Консоль «${info.title}»:\n${consoleOf(page).slice(-40).join('\n')}`);
@@ -230,5 +230,45 @@ test('локальное имя личного чата: видно везде, 
   const back = page.getByRole('button', { name: 'Назад' });
   if (await back.isVisible()) await back.click();
   await expect(page.getByRole('link', { name: /^Аня/ })).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test('обои: градиент за перепиской и непрозрачные пузыри; своё фото — до выхода из аккаунта', async ({ page }) => {
+  const problems = watchForProblems(page);
+  await signInToDemo(page);
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const tiles = page.getByRole('radiogroup', { name: 'Обои' });
+  await expect(tiles.getByRole('radio', { name: 'Без обоев' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('slider')).toHaveCount(0);
+  await tiles.getByRole('radio', { name: 'Море' }).click();
+  await expect(page.getByRole('slider')).toBeVisible();
+
+  await openRoom(page, /^Аня/);
+  const room = page.getByRole('region', { name: 'Переписка' });
+  await expect(room).toHaveAttribute('data-wallpaper', '');
+  // На обоях входящий пузырь — непрозрачный, а не восемь процентов чёрного.
+  const bubble = page.getByRole('log').getByRole('article').filter({ hasText: 'Возьми плед' });
+  await expect.poll(() => bubble.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(252, 252, 252)');
+
+  // Своё фото: выбрать — и оно за перепиской, и переживает перезагрузку.
+  const back = page.getByRole('button', { name: 'Назад' });
+  if (await back.isVisible()) await back.click();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const chooser = page.waitForEvent('filechooser');
+  await tiles.getByRole('radio', { name: 'Своё фото' }).click();
+  await (await chooser).setFiles({ name: 'wall.png', mimeType: 'image/png', buffer: png });
+  await expect(tiles.getByRole('radio', { name: 'Своё фото' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('button', { name: 'Выбрать другое фото' })).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  // Сначала дождаться экрана: `openRoom` спрашивает «видно ли „Назад“» один раз и сразу.
+  await expect(page.getByRole('heading', { name: 'Настройки', level: 1 })).toBeVisible({ timeout: 20_000 });
+  await openRoom(page, /^Аня/);
+  await expect(page.locator('[data-wallpaper-kind="photo"] img')).toBeVisible();
+
+  if (await back.isVisible()) await back.click();
+  await signOut(page);
+  await expect.poll(async () => (await page.evaluate(() => indexedDB.databases())).map((d) => d.name)).not.toContain('iskra-wallpaper');
   expect(problems).toEqual([]);
 });

@@ -230,6 +230,19 @@
     font-weight: 600;
     color: var(--color-text-secondary);
   }
+  /* На обоях надпись, стоящая прямо на фоне, — на плашке, как разделитель дня: серый текст
+     на «Море» не прочитать. Внутри пузырей ничего не меняется. */
+  :global([data-wallpaper]) .sender,
+  :global([data-wallpaper]) .service {
+    width: fit-content;
+    padding: var(--space-within-run) var(--space-close);
+    border-radius: var(--radius-circle);
+    background: var(--color-incoming-bubble);
+  }
+  :global([data-wallpaper]) .sender {
+    align-self: flex-start;
+    margin-inline-start: calc(var(--bubble-pad-x) - var(--space-close));
+  }
   .bubble {
     max-width: 100%;
     padding: var(--bubble-pad-y) var(--bubble-pad-x);
