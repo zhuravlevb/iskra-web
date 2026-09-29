@@ -93,10 +93,17 @@
   export async function reveal(eventId: string): Promise<void> {
     if (!(await store.reveal(eventId))) return;
     const key = store.messages.find((m) => m.eventId === eventId)?.key;
-    await tick();
-    const element = key ? content?.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(key)}"]`) : null;
+    if (!key) return;
+    // Лента пересобирается раз в кадр — строки может ещё не быть в DOM. Подождать несколько.
+    let element: HTMLElement | null = null;
+    for (let frame = 0; frame < 10 && !element; frame++) {
+      await tick();
+      element = content?.querySelector<HTMLElement>(`[data-anchor="${CSS.escape(key)}"]`) ?? null;
+      if (!element) await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
     if (!element) return;
-    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (anchor) anchor.reveal(element);
+    else element.scrollIntoView({ block: 'center' });
     element.classList.add('flash');
     setTimeout(() => element.classList.remove('flash'), 1600);
   }

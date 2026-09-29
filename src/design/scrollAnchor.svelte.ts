@@ -121,6 +121,22 @@ export class ScrollAnchor {
     if (scrollTop <= this.options.topReach) this.options.onNearTop();
   }
 
+  /**
+   * Показать элемент — переход к сообщению. Сам, а не `scrollIntoView` снаружи: иначе якорь
+   * считает, что человек всё ещё внизу, и первая же перемена раскладки (открылась панель,
+   * догрузилась картинка) до события прокрутки «возвращает» ленту вниз. Сразу, а не плавно:
+   * плавная прокрутка — это десятки кадров, в каждый из которых раскладка может её перебить.
+   */
+  reveal(element: HTMLElement): void {
+    this.stick = false;
+    const shift = this.top(element) + element.offsetHeight / 2 - this.container.clientHeight / 2;
+    this.container.scrollTop += shift;
+    this.measure();
+    // Якорь — само показанное, а не то, что оказалось верхним: раскладка держит на месте его.
+    this.anchorKey = element.dataset['anchor'] ?? this.anchorKey;
+    this.anchorOffset = this.top(element);
+  }
+
   /** «Вниз, к последнему сообщению». */
   scrollToBottom(): void {
     this.stick = true;
