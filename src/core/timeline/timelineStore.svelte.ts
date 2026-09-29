@@ -16,6 +16,7 @@
  * - Поколение: ответ, пришедший после сброса ленты, не пишет в новую ленту.
  */
 import {
+  ClientEvent,
   Direction,
   EventStatus,
   EventType,
@@ -149,6 +150,7 @@ export class TimelineStore {
     on(RoomMemberEvent.Name, (_e: MatrixEvent, member: { roomId: string }) => member.roomId === this.roomId && this.schedule());
     on(RoomMemberEvent.Typing, (_e: MatrixEvent, member: { roomId: string }) => member.roomId === this.roomId && this.readTyping());
     on(RoomStateEvent.Events, (event: MatrixEvent) => event.getRoomId() === this.roomId && this.schedule());
+    on(ClientEvent.AccountData, (event: MatrixEvent) => event.getType() === EventType.IgnoredUserList && this.schedule());
   }
 
   private readTyping(): void {
@@ -255,6 +257,8 @@ export class TimelineStore {
     // Снимок на одну пересборку, не состояние.
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const pinned = new Set(this.pinnedIds);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const blocked = new Set(this.client.getIgnoredUsers());
     return {
       ownUserId: this.ownUserId,
       nameOf: (userId) => room.getMember(userId)?.rawDisplayName?.trim() || userId,
@@ -265,6 +269,7 @@ export class TimelineStore {
         eventTypes.flatMap((type) => room.relations.getChildEventsForEvent(eventId, relType, type)?.getRelations() ?? []),
       isPinned: (eventId) => pinned.has(eventId),
       canRedactOthers: (event) => !!state?.maySendRedactionForEvent(event, this.ownUserId),
+      isBlocked: (userId) => blocked.has(userId),
       keyOf: (event) => {
         let key = this.keys.get(event);
         if (!key) {

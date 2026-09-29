@@ -65,6 +65,9 @@
     {#if message.canDelete}
       <button type="button" role="menuitem" class="danger" onclick={() => run(actions.remove)}>{t('message.menu.delete')}</button>
     {/if}
+    {#if !message.own}
+      <button type="button" role="menuitem" class="danger" onclick={() => run(actions.block)}>{t('message.menu.block')}</button>
+    {/if}
     <p class="sent">{t('message.menu.sentAt', { time: clock(message.ts, i18n.locale) })}</p>
   {/if}
 </Menu>

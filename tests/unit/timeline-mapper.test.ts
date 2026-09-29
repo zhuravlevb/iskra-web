@@ -15,6 +15,7 @@ const byId = new Map<string, MatrixEvent>();
 /** Связи по ID родителя — как `room.relations` у SDK. */
 const related = new Map<string, MatrixEvent[]>();
 const pinnedIds = new Set<string>();
+const blocked = new Set<string>();
 let moderator = false;
 const context: MapperContext = {
   ownUserId: ME,
@@ -27,6 +28,7 @@ const context: MapperContext = {
     (related.get(id) ?? []).filter((e) => e.getRelation()?.rel_type === relType && types.includes(e.getType())),
   isPinned: (id) => pinnedIds.has(id),
   canRedactOthers: () => moderator,
+  isBlocked: (id) => blocked.has(id),
 };
 
 const map = (json: Partial<IEvent> & { type: string }) => mapEvent(ev(json), context);
@@ -173,6 +175,17 @@ describe('TimelineMapper', () => {
     expect(member({ membership: 'join', displayname: 'Анна' }, { membership: 'join', displayname: 'Аня' })).toEqual({ type: 'service', event: { type: 'renamedThemselves', from: 'Аня', to: 'Анна' } });
     expect(member({ membership: 'join', displayname: 'Аня', avatar_url: 'mxc://x/y' }, { membership: 'join', displayname: 'Аня' })).toBeUndefined();
     expect(map({ type: 'm.room.power_levels', state_key: '', content: {} })).toBeUndefined();
+  });
+
+  it('заблокированный: его сообщений нет, служебные строки о нём — есть', () => {
+    blocked.add('@anya:x');
+    try {
+      expect(map({ type: 'm.room.message', content: { msgtype: 'm.text', body: 'ты' } })).toBeUndefined();
+      expect(map({ type: 'm.room.message', sender: '@boris:x', content: { msgtype: 'm.text', body: 'я' } })).toBeDefined();
+      expect(map({ type: 'm.room.member', state_key: '@anya:x', content: { membership: 'join', displayname: 'Аня' } })?.kind.type).toBe('service');
+    } finally {
+      blocked.clear();
+    }
   });
 
   it('ещё не расшифрованное — не строка; не расшифровавшееся — «не открыть»', () => {

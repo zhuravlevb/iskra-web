@@ -24,6 +24,8 @@ export interface MapperContext {
   isPinned: (eventId: string) => boolean;
   /** Может ли этот человек удалить *чужое* событие — право модератора. */
   canRedactOthers: (event: MatrixEvent) => boolean;
+  /** Заблокирован ли отправитель: его сообщений не видно, служебные строки о нём — видно. */
+  isBlocked: (userId: string) => boolean;
 }
 
 const POLL_START = new Set(['m.poll.start', 'org.matrix.msc3381.poll.start']);
@@ -37,6 +39,7 @@ export function mapEvent(event: MatrixEvent, context: MapperContext): Message | 
   if (!kind) return undefined;
 
   const senderId = event.getSender() ?? '';
+  if (kind.type !== 'service' && senderId !== context.ownUserId && context.isBlocked(senderId)) return undefined;
   const rawId = event.getId();
   const eventId = rawId && !rawId.startsWith('~') ? rawId : undefined;
   const replyTo = kind.type === 'deleted' ? undefined : replyOf(event, context);

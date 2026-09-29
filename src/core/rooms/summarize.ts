@@ -11,6 +11,8 @@ export interface SummaryContext {
   /** Из `m.direct`: комната → собеседник. */
   directRooms: Map<string, string>;
   mutedRooms: Set<string>;
+  /** Заблокированные: их сообщение не становится превью. */
+  blocked: Set<string>;
 }
 
 const MARKED_UNREAD = ['m.marked_unread', 'com.famedly.marked_unread'];
@@ -58,6 +60,7 @@ export function summarize(room: Room, context: SummaryContext): RoomSummary | un
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]!;
     if (!isPreviewable(event)) continue;
+    if (context.blocked.has(event.getSender() ?? '')) continue;
     lastEvent = event;
     preview = previewOf(event);
     lastActivity = event.getTs();

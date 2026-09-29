@@ -40,6 +40,7 @@
   let stashed = '';
   let menu = $state<{ message: Message; at: { x: number; y: number }; sheet: boolean } | null>(null);
   let deleting = $state<Message | null>(null);
+  let blocking = $state<Message | null>(null);
   let attachments = $state<OutgoingFile[]>([]);
   let dropping = $state(false);
   let tooLarge = $state('');
@@ -210,6 +211,7 @@
     pin: (message) => store?.pin(message),
     unpin: (message) => store?.unpin(message),
     remove: (message) => (deleting = message),
+    block: (message) => (blocking = message),
     retry: (key) => store?.retry(key),
     discard: (key) => store?.discard(key),
     openMenu: (message, at, sheet) => (menu = { message, at, sheet }),
@@ -279,6 +281,12 @@
         <button type="button" onclick={() => store?.dismissFailure()}>{t('timeline.dismiss')}</button>
       </div>
     {/if}
+    {#if session.blocked.failure === 'blockFailed'}
+      <div class="failure" role="alert">
+        <span>{t('account.blockFailed')}</span>
+        <button type="button" onclick={() => session.blocked.dismissFailure()}>{t('timeline.dismiss')}</button>
+      </div>
+    {/if}
   </div>
   <Composer
     bind:this={composer}
@@ -312,6 +320,20 @@
   onconfirm={() => {
     if (deleting) store?.remove(deleting);
     deleting = null;
+  }}
+/>
+
+<ConfirmDialog
+  open={!!blocking}
+  title={t('message.menu.blockConfirm', { name: blocking?.senderName ?? '' })}
+  message={t('message.menu.blockConfirmMessage')}
+  confirmLabel={t('message.menu.block')}
+  cancelLabel={t('common.cancel')}
+  destructive
+  onclose={() => (blocking = null)}
+  onconfirm={() => {
+    if (blocking) void session.blocked.block(blocking.senderId);
+    blocking = null;
   }}
 />
 

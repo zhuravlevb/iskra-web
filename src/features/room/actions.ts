@@ -15,6 +15,8 @@ export interface MessageActions {
   unpin(message: Message): void;
   /** Спросить «удалить у всех?» — и удалить. */
   remove(message: Message): void;
+  /** Спросить «заблокировать?» — и заблокировать отправителя. */
+  block(message: Message): void;
   retry(key: string): void;
   discard(key: string): void;
   /** Просмотрщик — с этого фото или видео. */

@@ -138,3 +138,30 @@ test('настройки: имя, язык, тема, шрифт; устройс
     await expect(page.getByRole('heading', { name: 'Ваш профиль' })).toBeVisible();
   }
 });
+
+test('заблокировать из меню сообщения — сообщений не видно; разблокировать — в настройках', async ({ page }) => {
+  const problems = watchForProblems(page);
+  await signInToDemo(page);
+  await openRoom(page, /^Дом 14/);
+  const bubble = page.getByRole('log').getByRole('article').filter({ hasText: 'Лифт опять не работает' });
+  await bubble.click({ button: 'right' });
+  await page.getByRole('menu', { name: 'Ещё' }).getByRole('menuitem', { name: 'Заблокировать' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Заблокировать Вера?' });
+  await expect(dialog).toContainText('Разблокировать можно в настройках');
+  await dialog.getByRole('button', { name: 'Заблокировать' }).click();
+  await expect(bubble).toHaveCount(0, { timeout: 10_000 });
+  // Служебная строка о ней остаётся: блокировка прячет слова, а не факт, что человек в чате.
+  await expect(page.getByRole('log')).toContainText('Повестка');
+
+  const back = page.getByRole('button', { name: 'Назад' });
+  if (await back.isVisible()) await back.click();
+  // И в списке чатов её слова не превью.
+  await expect(page.getByRole('link', { name: /^Дом 14/ })).not.toContainText('Лифт опять');
+
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const section = page.getByRole('region', { name: 'Заблокированные' });
+  await expect(section).toContainText('@vera:demo.iskra.invalid');
+  await section.getByRole('button', { name: 'Разблокировать' }).click();
+  await expect(section).toContainText('Никто не заблокирован', { timeout: 10_000 });
+  expect(problems).toEqual([]);
+});

@@ -98,6 +98,18 @@
   });
   const accountPage = $derived(session.accountPage());
 
+  // ————— Заблокированные —————
+
+  // Только Matrix ID, без имён, как в нативной Искре: список — это ID, а имя может быть чьим угодно.
+  const blocked = $derived(session.blocked);
+  let unblocking = $state<string | null>(null);
+
+  async function unblock(userId: string) {
+    unblocking = userId;
+    await blocked.unblock(userId);
+    unblocking = null;
+  }
+
   // ————— Хранилище —————
 
   let persisted = $state<boolean | null>(null);
@@ -230,6 +242,26 @@
     <p class="secondary">{t('settings.devicesHelp')}</p>
     {#if accountPage}
       <a class="link" href={accountPage} target="_blank" rel="noopener noreferrer">{t('settings.openAccountPage')}</a>
+    {/if}
+  </section>
+
+  <section id="settings-blocked" aria-labelledby="blocked-title">
+    <h2 id="blocked-title">{t('settings.blocked')}</h2>
+    {#if blocked.ids.length}
+      <ul class="list">
+        {#each blocked.ids as userId (userId)}
+          <li class="row">
+            <span class="id">{userId}</span>
+            <PlainButton busy={unblocking === userId} disabled={offline} onclick={() => void unblock(userId)}>{t('settings.unblock')}</PlainButton>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p>{t('settings.blockedEmptyTitle')}</p>
+      <p class="secondary">{t('settings.blockedEmptyMessage')}</p>
+    {/if}
+    {#if blocked.failure === 'unblockFailed'}
+      <p class="problem" role="alert">{t('account.unblockFailed')}</p>
     {/if}
   </section>
 
@@ -448,6 +480,18 @@
     display: flex;
     flex-direction: column;
     padding: var(--space-close) var(--space-normal);
+  }
+  /* Сеткой, а не флексом: `PlainButton` тянется на всю ширину, а колонка `auto` его держит. */
+  .list li.row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-normal);
+  }
+  .id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .list li + li {
     border-block-start: var(--border-hairline) solid var(--color-separator);

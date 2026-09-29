@@ -56,6 +56,8 @@ export class RoomListStore {
       ownUserId: this.client.getSafeUserId(),
       directRooms,
       mutedRooms: mutedRoomIds(this.client.pushRules),
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- снимок, как и весь контекст
+      blocked: new Set(this.client.getIgnoredUsers()),
     };
   }
 
@@ -95,8 +97,8 @@ export class RoomListStore {
       if (roomId) this.mark(roomId);
     });
     this.on(ClientEvent.AccountData, (event: MatrixEvent) => {
-      // `m.direct` и push rules меняют вид любой комнаты — пересобрать всё.
-      if (event.getType() === EventType.Direct || event.getType() === EventType.PushRules) {
+      // `m.direct`, push rules и заблокированные меняют вид любой комнаты — пересобрать всё.
+      if (event.getType() === EventType.Direct || event.getType() === EventType.PushRules || event.getType() === EventType.IgnoredUserList) {
         this.context = this.buildContext();
         this.markAll();
       }

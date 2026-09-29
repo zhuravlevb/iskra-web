@@ -35,6 +35,7 @@ import { deleteDatabase } from '../storage/idb';
 import { fromBase64 } from '../storage/secretBox';
 import { vault, type Account, type AccountSecrets } from '../storage/vault';
 import { quietLogger } from '../support/logger';
+import { BlockList } from './blockList.svelte.ts';
 
 export type Connection = 'connecting' | 'online' | 'offline';
 
@@ -81,6 +82,8 @@ export class UserSession {
   readonly recovery: RecoveryStore | null;
   /** Сверка эмодзи с другим устройством. */
   readonly verification: VerificationStore | null;
+  /** Заблокированные — игнор-список аккаунта. */
+  readonly blocked: BlockList;
   private readonly client: MatrixClient;
   private readonly account: Account;
   private readonly detach: Array<() => void> = [];
@@ -104,6 +107,7 @@ export class UserSession {
     });
     this.recovery = keys ? new RecoveryStore(client, keys) : null;
     this.verification = keys ? new VerificationStore(client) : null;
+    this.blocked = new BlockList(client);
   }
 
   /** Лента комнаты. Живёт, пока открыт чат: тот, кто открыл, её и `destroy()`. */
@@ -357,6 +361,7 @@ export class UserSession {
     this.stopped = true;
     for (const off of this.detach.splice(0)) off();
     this.rooms.destroy();
+    this.blocked.destroy();
     this.verification?.destroy();
     this.thumbnails.clear();
     this.media.clear();

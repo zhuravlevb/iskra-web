@@ -5,7 +5,7 @@
  *
  * Hash, а не путь, — чтобы статическому хостингу не нужны были правила перезаписи.
  */
-export const settingsSections = ['profile', 'security', 'devices', 'appearance', 'storage', 'about'] as const;
+export const settingsSections = ['profile', 'security', 'devices', 'blocked', 'appearance', 'storage', 'about'] as const;
 export type SettingsSection = (typeof settingsSections)[number];
 
 export type Route = { name: 'home' } | { name: 'room'; roomId: string } | { name: 'settings'; section?: SettingsSection };
