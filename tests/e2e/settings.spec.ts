@@ -272,3 +272,22 @@ test('обои: градиент за перепиской и непрозрач
   await expect.poll(async () => (await page.evaluate(() => indexedDB.databases())).map((d) => d.name)).not.toContain('iskra-wallpaper');
   expect(problems).toEqual([]);
 });
+
+test('компактный вид: без пузырей, имя — у каждой серии, в личном чате тоже', async ({ page }) => {
+  await signInToDemo(page);
+  await openRoom(page, /^Аня/);
+  const log = page.getByRole('log');
+  // В пузырях личного чата имён нет: и так понятно, кто говорит.
+  await expect(log.getByText('Алиса', { exact: true })).toHaveCount(0);
+
+  const back = page.getByRole('button', { name: 'Назад' });
+  if (await back.isVisible()) await back.click();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('switch', { name: 'Компактный вид' }).check();
+
+  await openRoom(page, /^Аня/);
+  // Своё выглядит как чужое — и только имя говорит, кто писал.
+  await expect(log.getByText('Алиса', { exact: true }).first()).toBeVisible();
+  const own = log.getByRole('article').filter({ hasText: 'Поеду! Во сколько?' });
+  await expect.poll(() => own.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+});

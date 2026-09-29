@@ -5,6 +5,11 @@
   акценте; чужое — слева, нейтральной заливкой. В группе у первой строки серии — имя, у
   последней — лицо; в личном чате ни того, ни другого: и так понятно, кто говорит.
 
+  Компактный вид (`CompactMessageRow` нативной Искры) — те же строки без пузырей и без
+  сторон: своё выглядит как чужое, и имя над серией — единственное, что говорит, кто
+  пишет. Поэтому имя и лицо — всегда, в личном чате тоже, у *первой* строки серии; время —
+  у каждой строки, а не в шапке: серия может длиться час.
+
   Действия (см. план, «Ввод»): с мышью — панель по наведению (реакция, ответ, «ещё») и то же
   меню по правому щелчку; пальцем — долгое нажатие (браузер присылает его как
   `contextmenu`), двойное касание — быстрая реакция, свайп вправо — ответить. Над ссылкой и
@@ -40,6 +45,11 @@
   }
   let { message, firstInRun, lastInRun, showSenders, senderPhoto, actions, media }: Props = $props();
 
+  const compact = $derived(preferences.layout === 'compact');
+  /** Колонка лиц: в компактном — у всех, в пузырях — у собеседников в группе. */
+  const withFace = $derived(compact || (showSenders && !message.own));
+  const faceHere = $derived(compact ? firstInRun : lastInRun);
+  const nameHere = $derived(firstInRun && withFace);
   const kind = $derived(message.kind);
   const failed = $derived(message.delivery.state === 'failed' ? message.delivery : null);
   /** С ушедшим можно что-то делать; с удалённым и служебным — нет. */
@@ -70,16 +80,16 @@
 {#if kind.type === 'service'}
   <p class="service">{serviceText(kind.event)}</p>
 {:else}
-  <div class="row" class:own={message.own} class:first={firstInRun} class:grouped={showSenders && !message.own} class:interactive>
-    {#if showSenders && !message.own}
+  <div class="row" class:own={message.own && !compact} class:compact class:first={firstInRun} class:grouped={withFace} class:interactive>
+    {#if withFace}
       <span class="face">
-        {#if lastInRun}
+        {#if faceHere}
           <Avatar name={message.senderName} seed={message.senderId} photo={senderPhoto} mode={preferences.faces} />
         {/if}
       </span>
     {/if}
     <div class="stack">
-      {#if showSenders && !message.own && firstInRun}
+      {#if nameHere}
         <span class="sender">{message.senderName}</span>
       {/if}
       <div class="bubble-wrap">
@@ -312,6 +322,38 @@
   .meta .failed {
     color: var(--color-danger);
     opacity: 1;
+  }
+  /* Компактный: без пузыря, во всю ширину, лицо — сверху серии. */
+  .row.compact {
+    align-items: flex-start;
+  }
+  .compact .stack {
+    flex: 1;
+    max-width: 100%;
+  }
+  .compact .sender {
+    padding-inline: 0;
+  }
+  :global([data-wallpaper]) .compact .sender {
+    margin-inline-start: 0;
+  }
+  .compact .bubble-wrap,
+  .compact .bubble {
+    width: 100%;
+  }
+  .compact .bubble:not(.visual) {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  /* На обоях строка без пузыря потерялась бы на картинке — ей возвращается плашка. */
+  :global([data-wallpaper]) .compact .bubble:not(.visual) {
+    padding: var(--space-tight) var(--space-close);
+    border-radius: var(--radius-control);
+    background: var(--color-incoming-bubble);
+  }
+  .compact .bubble.visual {
+    background: transparent;
   }
   .reactions {
     display: flex;

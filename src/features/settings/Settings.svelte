@@ -278,6 +278,15 @@
     </div>
     <h3 id="accent-title">{t('appearance.accent')}</h3>
     <AccentSwatches labelledby="accent-title" />
+    <label class="switch">
+      <span>{t('appearance.compact')}</span>
+      <input
+        type="checkbox"
+        role="switch"
+        checked={preferences.layout === 'compact'}
+        onchange={(event) => (preferences.layout = event.currentTarget.checked ? 'compact' : 'bubbles')}
+      />
+    </label>
     <h3 id="wallpaper-title">{t('appearance.wallpaper')}</h3>
     <WallpaperPicker labelledby="wallpaper-title" />
     <h3 id="font-title">{t('appearance.font')}</h3>
@@ -524,6 +533,22 @@
   .option {
     display: flex;
     flex-direction: column;
+  }
+  .switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-normal);
+    min-height: var(--tap-target);
+    padding: var(--space-close) var(--space-normal);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    cursor: pointer;
+  }
+  .switch input {
+    width: var(--size-icon);
+    height: var(--size-icon);
+    accent-color: var(--accent);
   }
   dl {
     display: grid;

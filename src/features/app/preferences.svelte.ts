@@ -26,6 +26,10 @@ export const MAX_DIMMING = 0.8;
 /** Четверть: градиенту не нужно, фото обычно нужно, а с нуля своё фото сначала нечитаемо. */
 const DEFAULT_DIMMING = 0.25;
 
+/** Как выглядит переписка — `MessageLayout` нативной Искры: пузыри или компактный столбец. */
+export const layouts = ['bubbles', 'compact'] as const;
+export type MessageLayout = (typeof layouts)[number];
+
 /** Язык: как в браузере или выбранный вручную (план: «с выбором вручную в настройках»). */
 export type LanguageChoice = 'system' | Locale;
 
@@ -37,6 +41,7 @@ const keys = {
   font: 'appearance.font',
   language: 'language',
   welcomeSeen: 'onboarding.welcomeSeen',
+  layout: 'messages.layout',
   wallpaper: 'appearance.wallpaper',
   wallpaperDimming: 'appearance.wallpaperDimming',
 } as const;
@@ -79,6 +84,7 @@ class Preferences {
    * показанными (`Onboarding.welcomeSeenKey` нативной Искры).
    */
   welcomeSeen = $state<boolean>(read(keys.welcomeSeen) === '1');
+  layout = $state<MessageLayout>(oneOf(read(keys.layout), layouts, 'bubbles'));
   wallpaper = $state<Wallpaper>(oneOf(read(keys.wallpaper), wallpapers, 'none'));
   wallpaperDimming = $state<number>(dimming(read(keys.wallpaperDimming)));
 
@@ -90,6 +96,7 @@ class Preferences {
       $effect(() => write(keys.listWidth, String(this.listWidth)));
       $effect(() => write(keys.faces, this.faces));
       $effect(() => write(keys.font, this.font));
+      $effect(() => write(keys.layout, this.layout));
       $effect(() => write(keys.wallpaper, this.wallpaper));
       $effect(() => write(keys.wallpaperDimming, String(this.wallpaperDimming)));
       $effect(() => {
