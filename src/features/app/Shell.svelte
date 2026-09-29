@@ -48,10 +48,9 @@
   });
   $effect(() => () => showBadge(0, t('app.name')));
 
-  /** Видимый порядок чатов — для Alt ↑/↓: как в списке, без архива и пространств. */
+  /** Видимый порядок чатов — для Alt ↑/↓: как в списке, без архива, приглашений и пространств. */
   function visibleOrder() {
-    const { pinned, chats } = session.rooms.sections;
-    return [...pinned, ...chats];
+    return session.rooms.organized.list.filter((room) => room.membership !== 'invite' && room.kind !== 'space');
   }
 
   function step(direction: 1 | -1, onlyUnread: boolean) {

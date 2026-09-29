@@ -334,7 +334,6 @@
   "roomList.archive.title": "Архив",
   "roomList.emptyMessage": "Когда вам напишут, разговор появится здесь.",
   "roomList.emptyTitle": "Чатов пока нет",
-  "roomList.filter.all": "Все",
   "roomList.hasUnread": "Есть непрочитанные",
   "roomList.invite.accept": "Войти",
   "roomList.invite.decline": "Отклонить",
@@ -357,10 +356,6 @@
   "roomList.newRoom": "Новая комната",
   "roomList.pinned": "Закреплённый чат",
   "roomList.privateChat": "Защищённый чат",
-  "roomList.section.chats": "Чаты",
-  "roomList.section.invitations": "Приглашения",
-  "roomList.section.pinned": "Закреплённые",
-  "roomList.section.spaces": "Пространства",
   "roomList.title": "Чаты",
   "roomList.unread": {
     "one": "{count} непрочитанное",

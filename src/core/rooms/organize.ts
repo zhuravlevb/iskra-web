@@ -1,34 +1,35 @@
 /**
- * Разделы списка — как у бета-панели нативной Искры на Mac: приглашения, пространства,
- * закреплённые, остальные. Архив (низкий приоритет) — отдельно, в общий список не входит.
- *
- * Внутри раздела — по последней активности. Раздел — это фильтр, а не пересортировка:
- * самый живой разговор наверху того раздела, куда он попал.
+ * Порядок списка — как в нативной Искре (`RoomListStore.byRecency`): один список, без
+ * разделов. Сверху приглашения — единственное, что ждёт ответа (без сообщений они иначе
+ * утонули бы на самое дно); под ними закреплённые (`m.favourite`); дальше всё остальное,
+ * пространства вместе с чатами, — по последней активности. Архив (низкий приоритет) в общий
+ * список не входит: к нему ведёт строка «Архив» над списком.
  */
 import { countsTowardsBadge, type RoomSummary } from './types';
 
-export interface Sections {
-  invitations: RoomSummary[];
-  spaces: RoomSummary[];
-  pinned: RoomSummary[];
-  chats: RoomSummary[];
+export interface Organized {
+  /** Всё, что в главном списке, — уже в том порядке, в каком показывать. */
+  list: RoomSummary[];
   archived: RoomSummary[];
 }
 
 export const byActivity = (a: RoomSummary, b: RoomSummary): number =>
   b.lastActivity - a.lastActivity || a.id.localeCompare(b.id);
 
-export function organize(rooms: Iterable<RoomSummary>): Sections {
-  const sections: Sections = { invitations: [], spaces: [], pinned: [], chats: [], archived: [] };
+/** Приглашения, потом закреплённые, потом остальные; внутри — по активности. */
+const rank = (room: RoomSummary): number => (room.membership === 'invite' ? 0 : room.isFavourite ? 1 : 2);
+
+export function organize(rooms: Iterable<RoomSummary>): Organized {
+  const list: RoomSummary[] = [];
+  const archived: RoomSummary[] = [];
   for (const room of rooms) {
-    if (room.membership === 'invite') sections.invitations.push(room);
-    else if (room.kind === 'space') sections.spaces.push(room);
-    else if (room.isLowPriority) sections.archived.push(room);
-    else if (room.isFavourite) sections.pinned.push(room);
-    else sections.chats.push(room);
+    // Приглашение и пространство в архив не прячутся: первое ждёт ответа, второе — не чат.
+    if (room.isLowPriority && room.membership !== 'invite' && room.kind !== 'space') archived.push(room);
+    else list.push(room);
   }
-  for (const list of Object.values(sections)) list.sort(byActivity);
-  return sections;
+  list.sort((a, b) => rank(a) - rank(b) || byActivity(a, b));
+  archived.sort(byActivity);
+  return { list, archived };
 }
 
 /** Число для заголовка вкладки и значка на иконке: чаты, где ждёт что-то для вас. */

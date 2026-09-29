@@ -324,7 +324,6 @@
   "roomList.archive.title": "Archive",
   "roomList.emptyMessage": "When someone messages you, it’ll show up here.",
   "roomList.emptyTitle": "No chats yet",
-  "roomList.filter.all": "All",
   "roomList.hasUnread": "Unread",
   "roomList.invite.accept": "Join",
   "roomList.invite.decline": "Decline",
@@ -345,10 +344,6 @@
   "roomList.newRoom": "New room",
   "roomList.pinned": "Pinned chat",
   "roomList.privateChat": "Private chat",
-  "roomList.section.chats": "Chats",
-  "roomList.section.invitations": "Invitations",
-  "roomList.section.pinned": "Pinned",
-  "roomList.section.spaces": "Spaces",
   "roomList.title": "Chats",
   "roomList.unread": {
     "one": "{count} unread",

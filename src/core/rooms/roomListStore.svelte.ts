@@ -17,7 +17,7 @@ import {
   type Room,
   type RoomState,
 } from 'matrix-js-sdk';
-import { badgeCount, organize, type Sections } from './organize';
+import { badgeCount, organize, type Organized } from './organize';
 import { mutedRoomIds } from './pushRules';
 import { spaceChildren, summarize, type SummaryContext } from './summarize';
 import type { RoomSummary } from './types';
@@ -26,7 +26,7 @@ export class RoomListStore {
   /** Все комнаты, которые показываются в списке: вошли или приглашены. */
   // `raw`: сводки неизменяемы, и у неизменившейся комнаты тот же объект — строка не перерисуется.
   rooms = $state.raw<RoomSummary[]>([]);
-  readonly sections: Sections = $derived(organize(this.rooms));
+  readonly organized: Organized = $derived(organize(this.rooms));
   readonly badge: number = $derived(badgeCount(this.rooms));
 
   // Не реактивные сознательно: реактивен только `rooms`, пересобираемый раз в кадр.

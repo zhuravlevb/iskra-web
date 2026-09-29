@@ -44,16 +44,20 @@ async function until(condition: () => boolean, ms = 8000): Promise<void> {
 }
 
 describe('список чатов на демо-сервере', () => {
-  it('разделы: приглашение, пространство, закреплённый, остальные, архив', async () => {
+  it('один список, как в нативной Искре: приглашение, закреплённый, дальше по активности; архив отдельно', async () => {
     const { client } = await started();
     store = new RoomListStore(client);
-    const { invitations, spaces, pinned, chats, archived } = store.sections;
-    expect(invitations.map((r) => r.id)).toEqual([demoRooms.invite]);
-    expect(spaces.map((r) => r.id)).toEqual([demoRooms.family]);
-    expect(pinned.map((r) => r.id)).toEqual([demoRooms.anya]);
-    expect(archived.map((r) => r.id)).toEqual([demoRooms.archived]);
+    const { list, archived } = store.organized;
+    const byActivity = list.slice(2).map((r) => r.id);
+    expect(list.slice(0, 2).map((r) => r.id)).toEqual([demoRooms.invite, demoRooms.anya]);
+    // Пространство — среди чатов, на своём месте по активности, а не отдельным разделом.
+    expect(byActivity).toContain(demoRooms.family);
     // По последней активности: выходные (40 мин назад) → дом (5 ч) → история (26 ч).
-    expect(chats.map((r) => r.id)).toEqual([demoRooms.weekend, demoRooms.quiet, demoRooms.history]);
+    const chats = byActivity.filter((id) => id !== demoRooms.family);
+    expect(chats).toEqual([demoRooms.weekend, demoRooms.quiet, demoRooms.history]);
+    const times = list.slice(2).map((r) => r.lastActivity);
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    expect(archived.map((r) => r.id)).toEqual([demoRooms.archived]);
   });
 
   it('личный чат — имя, лицо и шифрование от собеседника', async () => {
@@ -112,7 +116,7 @@ describe('список чатов на демо-сервере', () => {
 
     await store.accept(demoRooms.invite);
     await until(() => store!.get(demoRooms.invite)?.membership === 'join');
-    expect(store.sections.invitations).toEqual([]);
+    expect(store.organized.list.filter((r) => r.membership === 'invite')).toEqual([]);
     expect(server.unknown).toEqual([]);
   });
 

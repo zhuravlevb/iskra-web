@@ -16,18 +16,22 @@ test('список чатов из демо: имена, превью, знач�
   expect(problems).toEqual([]);
 });
 
-test('разделы на широком экране, фильтр на телефоне', async ({ page }, info) => {
+test('один список на любой ширине: архив сверху, приглашение, закреплённый, дальше по активности', async ({ page }) => {
   await signInToDemo(page);
-  if (isPhone(info.project.name)) {
-    await expect(page.getByRole('heading', { name: 'Закреплённые' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Закреплённые' }).click();
-    await expect(page.getByRole('link', { name: /^Выходные/ })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /^Аня/ })).toBeVisible();
-  } else {
-    for (const name of ['Приглашения', 'Пространства', 'Закреплённые', 'Чаты']) {
-      await expect(page.getByRole('heading', { name, exact: true }).last()).toBeVisible();
-    }
-  }
+  const column = page.locator('.list-column');
+  // Ни заголовков разделов, ни фильтров — как в нативной Искре.
+  await expect(column.getByRole('heading', { level: 2 })).toHaveCount(0);
+  await expect(column.getByRole('toolbar')).toHaveCount(0);
+
+  const order = await column.locator('button.archive, [role=group], a[data-room-id]').evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('aria-label') ?? row.textContent?.trim().split('\n')[0] ?? ''),
+  );
+  expect(order[0]).toMatch(/^Архив/);
+  expect(order[1]).toBe('Книжный клуб');
+  expect(order[2]).toMatch(/^Аня/);
+  // Пространство «Семья» — не отдельным разделом, а среди чатов, после закреплённого.
+  expect(order.slice(3).some((name) => name.startsWith('Семья'))).toBe(true);
+  expect(order.findIndex((name) => name.startsWith('Выходные'))).toBeLessThan(order.findIndex((name) => name.startsWith('Дом 14')));
 });
 
 test('чат открывается из списка, его имя — в шапке', async ({ page }) => {
