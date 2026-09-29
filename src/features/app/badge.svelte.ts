@@ -3,8 +3,10 @@
  * и фавиконка получает точку. Во вкладке это единственный способ заметить сообщение, не
  * переключаясь. В установленном окне — ещё и `setAppBadge` на иконке в доке и таскбаре.
  */
-const ICON = '/icons/icon.svg';
-const ICON_UNREAD = '/icons/icon-unread.svg';
+import { asset } from '../../design/asset';
+
+const ICON = asset('icons/icon.svg');
+const ICON_UNREAD = asset('icons/icon-unread.svg');
 
 export function titleWith(count: number, appName: string): string {
   return count > 0 ? `(${count}) ${appName}` : appName;

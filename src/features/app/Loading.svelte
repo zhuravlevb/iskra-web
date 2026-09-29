@@ -1,10 +1,11 @@
 <!-- Пока поднимается сессия: иконка по центру, для скринридера — «Открываем Iskra…». -->
 <script lang="ts">
+  import { asset } from '../../design/asset';
   import { t } from '../../i18n/index.svelte.ts';
 </script>
 
 <main class="loading" aria-busy="true">
-  <img src="/icons/icon.svg" alt="" width="56" height="56" />
+  <img src={asset('icons/icon.svg')} alt="" width="56" height="56" />
   <p class="visually-hidden" role="status">{t('app.loading')}</p>
 </main>
 

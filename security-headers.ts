@@ -12,7 +12,7 @@
  * `connect-src https:` — сознательный компромисс: homeserver человек вводит
  * сам, заранее список не составить. Всё остальное закрыто.
  */
-function csp(dev: boolean): string {
+function csp(dev: boolean, meta = false): string {
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
     // wasm-unsafe-eval — Rust-крипто matrix-js-sdk, собранное в WASM.
@@ -38,6 +38,8 @@ function csp(dev: boolean): string {
     directives['require-trusted-types-for'] = ["'script'"];
     directives['trusted-types'] = ['svelte-trusted-html', 'dompurify', 'iskra-sw'];
   }
+  // В `<meta>` `frame-ancestors` не работает, и браузер ругается на него в консоль.
+  if (meta) delete directives['frame-ancestors'];
   return Object.entries(directives)
     .map(([name, values]) => `${name} ${values.join(' ')}`)
     .join('; ');
@@ -52,6 +54,15 @@ export function securityHeaders(dev: boolean): Record<string, string> {
       'camera=(self), microphone=(self), geolocation=(self), display-capture=(), payment=(), usb=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
   };
+}
+
+/**
+ * CSP для хостинга, который своих заголовков не даёт (GitHub Pages), — тегом `<meta>` в
+ * `index.html`. Слабее заголовка: без `frame-ancestors` (Iskra можно вставить во фрейм) и
+ * без COOP. Годится для ночной сборки, не для боевого адреса.
+ */
+export function metaCsp(): string {
+  return csp(false, true);
 }
 
 /** Формат `_headers` (Netlify, Cloudflare Pages). */

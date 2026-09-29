@@ -55,3 +55,42 @@ jobs:
         with:
           name: playwright-${{ matrix.engine }}
           path: test-results/
+
+  # Ночная сборка на GitHub Pages: каждый зелёный пуш в dev, по адресу
+  # https://<владелец>.github.io/iskra-web/. Pages не дают своих заголовков — CSP уходит
+  # тегом <meta> (без frame-ancestors и COOP; см. security-headers.ts). Для боевого адреса
+  # это не годится, для «попробовать dev» — да.
+  nightly:
+    needs: [check, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    # Pages ещё не включены (или недоступны для приватного репозитория на бесплатном
+    # плане) — это не повод красить CI: провал виден в самой job.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          ISKRA_BASE: /${{ github.event.repository.name }}/
+          ISKRA_META_CSP: '1'
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

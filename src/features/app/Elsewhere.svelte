@@ -3,13 +3,14 @@
   какая из вкладок главная, решает человек, а не мы.
 -->
 <script lang="ts">
+  import { asset } from '../../design/asset';
   import QuietButton from '../../design/QuietButton.svelte';
   import { app } from '../../core/session/app.svelte.ts';
   import { t } from '../../i18n/index.svelte.ts';
 </script>
 
 <main class="elsewhere">
-  <img src="/icons/icon.svg" alt="" width="56" height="56" />
+  <img src={asset('icons/icon.svg')} alt="" width="56" height="56" />
   <h1>{t('elsewhere.title')}</h1>
   <p>{t('elsewhere.message')}</p>
   <div class="actions">

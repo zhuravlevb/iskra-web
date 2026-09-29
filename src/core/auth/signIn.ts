@@ -37,19 +37,22 @@ type Pending =
       metadata: ValidatedAuthMetadata;
     };
 
-/** Куда сервер вернёт человека: корень приложения. Параметры стираются в `callback.ts`. */
+/**
+ * Куда сервер вернёт человека: корень приложения — с базовым путём сборки (на GitHub Pages
+ * это `/iskra-web/`). Параметры стираются в `callback.ts`.
+ */
 export function redirectUri(): string {
-  return `${window.location.origin}/`;
+  return `${window.location.origin}${import.meta.env.BASE_URL}`;
 }
 
 /** Метаданные клиента для динамической регистрации. Нужен настоящий https-домен. */
 export function clientMetadata(origin: string): OAuthRegistrationRequest {
   return {
     client_name: 'Iskra',
-    client_uri: `${origin}/`,
+    client_uri: `${origin}${import.meta.env.BASE_URL}`,
     application_type: 'web',
-    redirect_uris: [`${origin}/`],
-    logo_uri: `${origin}/icons/icon-512.png`,
+    redirect_uris: [`${origin}${import.meta.env.BASE_URL}`],
+    logo_uri: `${origin}${import.meta.env.BASE_URL}icons/icon-512.png`,
   };
 }
 

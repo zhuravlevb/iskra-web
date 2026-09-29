@@ -9,7 +9,9 @@
  */
 import { Workbox } from 'workbox-window';
 
-const SW_URL = '/sw.js';
+/** Скрипт и область SW — от базового пути сборки: на GitHub Pages это `/iskra-web/`. */
+const SCOPE = import.meta.env.BASE_URL;
+const SW_URL = `${SCOPE}sw.js`;
 
 function scriptUrl(): string | TrustedScriptURL {
   const factory = window.trustedTypes;
@@ -29,7 +31,7 @@ class AppUpdate {
 
   register(): void {
     if (!import.meta.env.PROD || !('serviceWorker' in navigator) || this.workbox) return;
-    this.workbox = new Workbox(scriptUrl() as string, { scope: '/' });
+    this.workbox = new Workbox(scriptUrl() as string, { scope: SCOPE });
     this.workbox.addEventListener('waiting', () => (this.available = true));
     // Без service worker'а приложение работает, просто без офлайна. Ничего не логируем.
     this.workbox.register().catch(() => {});

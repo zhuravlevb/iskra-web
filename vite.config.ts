@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
-import { headersFile, securityHeaders } from './security-headers.ts';
+import { headersFile, metaCsp, securityHeaders } from './security-headers.ts';
 
 /** Кладёт `_headers` со строгой CSP в `dist/` — для статического хостинга. */
 function staticHeaders(): Plugin {
@@ -15,6 +15,26 @@ function staticHeaders(): Plugin {
     },
   };
 }
+
+/**
+ * CSP тегом `<meta>` — для хостинга без своих заголовков (GitHub Pages, `ISKRA_META_CSP=1`).
+ * Первым в `<head>`: политика действует только на то, что идёт после неё.
+ */
+function metaPolicy(): Plugin {
+  return {
+    name: 'iskra:meta-csp',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler: () => [
+        { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: metaCsp() }, injectTo: 'head-prepend' },
+      ],
+    },
+  };
+}
+
+/** Базовый путь: `/` в корне домена, `/iskra-web/` на GitHub Pages (`ISKRA_BASE`). */
+const base = process.env['ISKRA_BASE'] ?? '/';
 
 /** Какая это сборка — коротким хэшем коммита: «Скопировать данные о сборке» в «Об Iskra». */
 function buildId(): string {
@@ -28,6 +48,7 @@ function buildId(): string {
 }
 
 export default defineConfig({
+  base,
   define: { __ISKRA_BUILD__: JSON.stringify(buildId()) },
   plugins: [
     svelte(),
@@ -38,12 +59,12 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['icons/icon.svg', 'icons/apple-touch-icon-180.png'],
       manifest: {
-        id: '/',
+        id: base,
         name: 'Iskra',
         short_name: 'Iskra',
         lang: 'ru',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         display_override: ['window-controls-overlay', 'standalone'],
         background_color: '#1c1c1e',
@@ -79,6 +100,7 @@ export default defineConfig({
       },
     }),
     staticHeaders(),
+    ...(process.env['ISKRA_META_CSP'] ? [metaPolicy()] : []),
   ],
   server: { headers: securityHeaders(true) },
   preview: { headers: securityHeaders(false) },

@@ -9,6 +9,7 @@
   имя, пароль и кнопка.
 -->
 <script lang="ts">
+  import { asset } from '../../design/asset';
   import PrimaryButton from '../../design/PrimaryButton.svelte';
   import QuietButton from '../../design/QuietButton.svelte';
   import TextField from '../../design/TextField.svelte';
@@ -95,7 +96,7 @@
 
 <main class="sign-in">
   <header>
-    <img src="/icons/icon.svg" alt="" width="56" height="56" />
+    <img src={asset('icons/icon.svg')} alt="" width="56" height="56" />
     <h1>{t('signIn.title')}</h1>
     <p class="secondary">{t('signIn.tagline')}</p>
   </header>
