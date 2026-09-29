@@ -71,6 +71,7 @@ export function consoleOf(page: Page): string[] {
 export async function signInToDemo(page: Page): Promise<string | null> {
   await enterDemoCredentials(page);
   const code = await passRecoveryStep(page);
+  await passFirstRun(page);
   await expect(page.getByRole('heading', { name: 'Чаты', level: 1 })).toBeVisible({ timeout: 20_000 });
   return code;
 }
@@ -145,6 +146,19 @@ async function passRecoveryStep(page: Page): Promise<string | null> {
   if (await save.isVisible()) return saveRecoveryCode(page);
   if (await unlock.isVisible()) await page.getByRole('button', { name: 'Закрыть' }).click();
   return null;
+}
+
+/**
+ * Первый запуск после нового входа: привет (проскочить нажатием — он на часах), цвет и
+ * мордочки — «Пропустить». Тестам чатов выбор цвета не нужен.
+ */
+export async function passFirstRun(page: Page): Promise<void> {
+  const greeting = page.getByRole('heading', { name: /^Привет/ });
+  await expect(greeting).toBeVisible({ timeout: 30_000 });
+  await greeting.click();
+  await page.getByRole('button', { name: 'Пропустить' }).click();
+  await expect(page.getByRole('heading', { name: 'Кому рисовать мордочки' })).toBeVisible();
+  await page.getByRole('button', { name: 'Пропустить' }).click();
 }
 
 /** Экран «Сохраните код»: забрать код, поставить галочку, «Я сохранил код». */

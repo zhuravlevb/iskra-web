@@ -31,7 +31,16 @@ export default defineConfig({
   // которого нет под рукой, — загадка.
   reporter: process.env['CI'] ? [['github'], ['list']] : 'list',
   // Русский пишется первым — и проверяется первым.
-  use: { baseURL: 'http://localhost:4173', locale: 'ru-RU' },
+  // Слайды «что такое Iskra» — один раз на устройство, и каждый тест — новое устройство.
+  // Им — свой тест (`onboarding.spec.ts`) с чистым хранилищем; остальным они уже показаны.
+  use: {
+    baseURL: 'http://localhost:4173',
+    locale: 'ru-RU',
+    storageState: {
+      cookies: [],
+      origins: [{ origin: 'http://localhost:4173', localStorage: [{ name: 'onboarding.welcomeSeen', value: '1' }] }],
+    },
+  },
   webServer: {
     command: 'pnpm build && pnpm preview --port 4173 --strictPort',
     url: 'http://localhost:4173',

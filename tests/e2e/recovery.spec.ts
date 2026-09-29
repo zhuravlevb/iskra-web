@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { enterDemoCredentials, signInToDemo, signOut, watchForProblems } from './helpers';
+import { enterDemoCredentials, passFirstRun, signInToDemo, signOut, watchForProblems } from './helpers';
 
 /**
  * Весь путь восстановления на демо-сервере: аккаунт Алисы переживает выход (он лежит в
@@ -20,6 +20,8 @@ test('новый аккаунт → код → выход → вход новы�
 
   // Отложил — плашка в списке чатов помнит и ведёт обратно.
   await page.getByRole('button', { name: 'Закрыть' }).click();
+  // Вход новый — значит, и первый запуск: привет, цвет, мордочки.
+  await passFirstRun(page);
   const locked = page.getByRole('button', { name: 'Старая переписка заблокирована' });
   await expect(locked).toBeVisible({ timeout: 20_000 });
   await locked.click();

@@ -44,6 +44,12 @@ export class AppState {
    * (не после перезагрузки страницы — там о запертой переписке напомнит плашка в списке).
    */
   recoveryStep = $state(false);
+  /**
+   * Первый запуск после *нового* входа: привет по имени, цвет, мордочки (`FirstRunView`
+   * нативной Искры). После восстановления, а не до: вопрос о том, прочитает ли устройство
+   * переписку, важнее вопроса о цвете.
+   */
+  firstRun = $state(false);
 
   private lock: SessionLock | null = null;
   private hooks: AppHooks = {};
@@ -86,6 +92,7 @@ export class AppState {
 
   private async finishSignIn(fresh: NewAccount): Promise<void> {
     this.recoveryStep = true;
+    this.firstRun = true;
     // Демо стирается при каждом новом входе: своя база, ни следа прошлого запуска.
     if (fresh.method === 'demo') await wipeUserData(fresh.userId).catch(() => {});
     let account: Account;
@@ -166,6 +173,11 @@ export class AppState {
   /** Шаг восстановления пройден (или отложен) — дальше чаты. */
   finishRecovery(): void {
     this.recoveryStep = false;
+  }
+
+  /** Первый запуск пройден или пропущен — дальше чаты. */
+  finishFirstRun(): void {
+    this.firstRun = false;
   }
 
   /** Плашка «Старая переписка заблокирована» — вернуться к шагу восстановления. */

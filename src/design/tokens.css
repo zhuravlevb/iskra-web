@@ -57,6 +57,8 @@
   --size-icon: 1.25rem; /* 20 — значок рядом с текстом */
   --size-icon-button: 1.5rem; /* 24 — значок в кнопке-иконке */
   --size-sign-in-mark: 3.5rem; /* 56 — Theme.Size.signInMark */
+  --size-welcome-mark: 8.25rem; /* 132 — Theme.Size.welcomeMark */
+  --size-page-dot: 0.5rem; /* 8 — Theme.Size.pageDot */
   --size-media-max-width: 20rem; /* 320 — фото в ленте */
   --size-media-max-height: 25rem; /* 400 — высокое фото не занимает весь экран */
   --size-sticker: 10rem; /* 160 */
@@ -74,6 +76,7 @@
 
   /* Время — Theme.Timing */
   --timing-chrome: 200ms;
+  --timing-arrival: 320ms; /* Theme.Timing.arrival */
   --timing-reaction: 250ms;
   --timing-deletion: 300ms;
 
@@ -131,6 +134,9 @@
   --color-glass: rgb(255 255 255 / 0.72);
   --color-glass-opaque: #f9f9f9;
   /* Color.primary.opacity(0.08) — incomingBubble */
+  /* Нарисованная «фотография» в примере мордочек — оранжевый в розовый, как в нативной. */
+  --color-photo-from: #ff9500;
+  --color-photo-to: #ff2d55;
   --color-incoming-bubble: rgb(0 0 0 / 0.08);
   --color-own-reaction: rgb(0 0 0 / 0.16);
   --color-danger: #ff3b30;

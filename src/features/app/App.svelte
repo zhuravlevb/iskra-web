@@ -12,6 +12,8 @@
   import RecoveryScreen from '../recovery/RecoveryScreen.svelte';
   import VerificationSheet from '../recovery/VerificationSheet.svelte';
   import { preferences } from './preferences.svelte.ts';
+  import Welcome from '../onboarding/Welcome.svelte';
+  import FirstRun from '../onboarding/FirstRun.svelte';
 
   let { authCallback }: { authCallback: AuthCallback | null } = $props();
 
@@ -49,6 +51,9 @@
 
 {#if app.phase.name === 'loading'}
   <Loading />
+{:else if app.phase.name === 'signed-out' && !preferences.welcomeSeen && !app.phase.problem && !app.phase.ended}
+  <!-- Один раз на устройство. С ошибкой входа или после конца сессии — сразу к делу. -->
+  <Welcome onstart={() => (preferences.welcomeSeen = true)} />
 {:else if app.phase.name === 'signed-out'}
   <SignIn problem={app.phase.problem} ended={app.phase.ended} />
 {:else if app.phase.name === 'elsewhere'}
@@ -60,6 +65,8 @@
     userId={app.phase.session.userId}
     ondone={() => app.finishRecovery()}
   />
+{:else if app.firstRun}
+  <FirstRun session={app.phase.session} ondone={() => app.finishFirstRun()} />
 {:else}
   <Shell session={app.phase.session} />
 {/if}

@@ -28,6 +28,7 @@ const keys = {
   faces: 'appearance.faces',
   font: 'appearance.font',
   language: 'language',
+  welcomeSeen: 'onboarding.welcomeSeen',
 } as const;
 
 function read(key: string): string | null {
@@ -57,6 +58,12 @@ class Preferences {
   faces = $state<FaceMode>(oneOf(read(keys.faces), faceModes, 'creatures'));
   font = $state<Font>(oneOf(read(keys.font), fonts, 'inter'));
   language = $state<LanguageChoice>(oneOf(read(keys.language), ['system', ...locales], 'system'));
+  /**
+   * Слайды «что такое Iskra» уже показаны на этом устройстве. Не настройка аккаунта: кто
+   * вышел, чтобы сменить аккаунт, не забыл, что такое Iskra, — и слайды при выходе остаются
+   * показанными (`Onboarding.welcomeSeenKey` нативной Искры).
+   */
+  welcomeSeen = $state<boolean>(read(keys.welcomeSeen) === '1');
 
   /** Пишет в хранилище и отражает на `<html>` всё, что изменилось. */
   persist(): () => void {
@@ -66,6 +73,9 @@ class Preferences {
       $effect(() => write(keys.listWidth, String(this.listWidth)));
       $effect(() => write(keys.faces, this.faces));
       $effect(() => write(keys.font, this.font));
+      $effect(() => {
+        if (this.welcomeSeen) write(keys.welcomeSeen, '1');
+      });
       $effect(() => {
         write(keys.language, this.language);
         i18n.locale = this.language === 'system' ? preferredLocale(navigator.languages ?? []) : this.language;
