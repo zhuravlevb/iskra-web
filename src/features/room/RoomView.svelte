@@ -24,13 +24,18 @@
   import { typingText } from './text';
   import Timeline from './Timeline.svelte';
 
-  let { session, roomId }: { session: UserSession; roomId: string } = $props();
+  interface Props {
+    session: UserSession;
+    roomId: string;
+    /** Лента чата — наружу, для вкладок «О чате»: они читают то, что она загрузила. */
+    store?: TimelineStore;
+  }
+  let { session, roomId, store = $bindable() }: Props = $props();
 
   /** Сколько «печатает…» держится после того, как все перестали: сообщение вот-вот придёт. */
   const TYPING_GRACE_MS = 700;
   const DRAFT_SAVE_MS = 400;
 
-  let store = $state<TimelineStore>();
   let composer: Composer | undefined = $state();
   let timeline: Timeline | undefined = $state();
 

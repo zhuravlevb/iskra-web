@@ -62,6 +62,7 @@
   --size-sticker: 10rem; /* 160 */
   --size-video-note: 12.5rem; /* 200 — «кружочек» */
   --size-attachment-tile: 4.5rem; /* 72 — вложение в лотке над полем */
+  --size-gallery-tile: 6rem; /* 96 — наименьшая клетка сетки «Фото и видео», как у RoomMediaGrid */
 
   /* Колонки. Список чатов — Theme.Size.sidebarMinimum/Ideal/Maximum. */
   --column-list-min: 17.5rem; /* 280 */

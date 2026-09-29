@@ -165,3 +165,36 @@ test('заблокировать из меню сообщения — сообщ
   await expect(section).toContainText('Никто не заблокирован', { timeout: 10_000 });
   expect(problems).toEqual([]);
 });
+
+test('«О чате»: вкладки «Что внутри» — фото, файлы, ссылки из загруженной ленты', async ({ page }) => {
+  const problems = watchForProblems(page);
+  await signInToDemo(page);
+  await openRoom(page, /^Выходные/);
+  const panel = await openPanel(page);
+  const tabs = panel.getByRole('tablist', { name: 'Что внутри' });
+  // Голосовых и кружков в «Выходных» нет — и вкладок для них нет.
+  await expect(tabs.getByRole('tab')).toHaveText(['Участники', 'Фото и видео', 'Файлы', 'Ссылки']);
+  await expect(tabs.getByRole('tab', { name: 'Участники' })).toHaveAttribute('aria-selected', 'true');
+
+  await tabs.getByRole('tab', { name: 'Фото и видео' }).click();
+  const grid = panel.getByRole('tabpanel');
+  await expect(grid.getByRole('button', { name: 'Фото' })).toHaveCount(2);
+  // Стрелки ходят по вкладкам.
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.getByRole('tab', { name: 'Файлы' })).toBeFocused();
+  await expect(panel.getByRole('tabpanel')).toContainText('Что взять.txt');
+  await page.keyboard.press('ArrowRight');
+  const link = panel.getByRole('tabpanel').getByRole('link', { name: 'https://example.org/weather' });
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(panel.getByRole('tabpanel')).toContainText('вроде солнце');
+
+  await tabs.getByRole('tab', { name: 'Фото и видео' }).click();
+  await panel.getByRole('tabpanel').getByRole('button', { name: 'Фото' }).first().click();
+  // Просмотрщик листает фото этой вкладки, новое — первым.
+  const viewer = page.getByRole('dialog', { name: 'Фото' });
+  await expect(viewer).toBeVisible();
+  await expect(viewer).toContainText('1 из 2');
+  await page.keyboard.press('Escape');
+  await expect(viewer).toBeHidden();
+  expect(problems).toEqual([]);
+});

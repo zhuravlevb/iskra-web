@@ -14,7 +14,7 @@
   import { RoomDetailsStore, type MemberSummary, type RoomRole } from '../../core/rooms/roomDetails.svelte.ts';
   import type { RoomAlerts } from '../../core/rooms/pushRules';
   import type { UserSession } from '../../core/session/userSession.svelte.ts';
-  import { plural, t, type TextKey } from '../../i18n/index.svelte.ts';
+  import { i18n, plural, t, type TextKey } from '../../i18n/index.svelte.ts';
   import { preferences } from '../app/preferences.svelte.ts';
   import Avatar from '../../design/Avatar.svelte';
   import RoomFace from '../rooms/RoomFace.svelte';
@@ -22,14 +22,22 @@
   import RoomEditDialog from './RoomEditDialog.svelte';
   import InviteDialog from './InviteDialog.svelte';
   import RoleDialog from './RoleDialog.svelte';
+  import type { TimelineStore } from '../../core/timeline/timelineStore.svelte.ts';
+  import { roomTimestamp } from '../../design/time';
+  import FileCard from '../media/FileCard.svelte';
+  import MediaTile from '../media/MediaTile.svelte';
+  import Viewer, { type ViewerItem } from '../media/Viewer.svelte';
+  import { availableTabs, roomContents, type ContentItem, type ContentTab } from './contents';
 
   interface Props {
     session: UserSession;
     roomId: string;
     /** Перейти к закреплённому сообщению в ленте. */
     onjump: (eventId: string) => void;
+    /** Лента открытого чата: вкладки «Что внутри» — из того, что она загрузила. */
+    timeline?: TimelineStore;
   }
-  let { session, roomId, onjump }: Props = $props();
+  let { session, roomId, onjump, timeline }: Props = $props();
 
   let details = $state<RoomDetailsStore>();
   $effect(() => {
@@ -107,6 +115,69 @@
     }
   }
 
+  // ————— Что внутри: вкладки —————
+
+  const contents = $derived(roomContents(timeline?.messages ?? []));
+  const tabs = $derived(availableTabs(contents, room?.kind !== 'direct'));
+  /** Что нажато последним. Могло исчезнуть — тогда открыта первая, а не пустая. */
+  let chosen = $state<ContentTab>('members');
+  const tab = $derived(tabs.includes(chosen) ? chosen : tabs[0]);
+  const tabTitle = (value: ContentTab): TextKey => `room.tabs.${value}`;
+  let tabButtons: Record<string, HTMLButtonElement | undefined> = $state({});
+  // Полоса шире узкой панели — прокручивается; выбранная вкладка не должна остаться за краем.
+  // Только саму полосу: `scrollIntoView` сдвинул бы и панель, стоит полосе быть ниже края.
+  let strip: HTMLElement | undefined = $state();
+  $effect(() => {
+    const button = tab ? tabButtons[tab] : undefined;
+    if (!strip || !button) return;
+    const left = button.offsetLeft; // от полосы: она `position: relative`
+    if (left < strip.scrollLeft) strip.scrollLeft = left;
+    else if (left + button.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = left + button.offsetWidth - strip.clientWidth;
+  });
+  let viewing = $state<{ items: ViewerItem[]; start: string } | null>(null);
+  let loadingEarlier = $state(false);
+  let now = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => (now = Date.now()), 60_000);
+    return () => clearInterval(timer);
+  });
+
+  /** Стрелки ходят по вкладкам, как в любом `tablist`; одна остановка Tab на всю полосу. */
+  function onTabKey(event: KeyboardEvent) {
+    const at = tab ? tabs.indexOf(tab) : -1;
+    const next =
+      event.key === 'ArrowRight' ? tabs[(at + 1) % tabs.length]
+      : event.key === 'ArrowLeft' ? tabs[(at - 1 + tabs.length) % tabs.length]
+      : event.key === 'Home' ? tabs[0]
+      : event.key === 'End' ? tabs.at(-1)
+      : undefined;
+    if (!next) return;
+    event.preventDefault();
+    chosen = next;
+    tabButtons[next]?.focus();
+  }
+
+  function view(items: ContentItem[], start: string) {
+    const visual = items.flatMap((i) => (i.kind === 'image' || i.kind === 'video' || i.kind === 'videoNote' ? [{ key: i.key, kind: i.kind, attachment: i.attachment }] : []));
+    viewing = { items: visual, start };
+  }
+
+  async function loadEarlier() {
+    if (!timeline || loadingEarlier) return;
+    loadingEarlier = true;
+    try {
+      await timeline.loadMore();
+    } finally {
+      loadingEarlier = false;
+    }
+  }
+
+  const when = (ts: number) => roomTimestamp(ts, now, i18n.locale, t('room.yesterday'));
+  const duration = (ms: number) => {
+    const s = Math.round(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
   async function leave() {
     leaving = false;
     if (await details?.leave()) router.go({ name: 'home' });
@@ -165,37 +236,101 @@
       </section>
     {/if}
 
-    <section aria-labelledby="members-title">
-      <h3 id="members-title">
-        {t('room.tabs.members')}
-        <span class="count">{plural('room.members', details.members.length)}</span>
-      </h3>
-      {#if details.permissions.canInvite}
-        <button type="button" class="link" onclick={() => (inviting = true)}>{t('room.manage.invite')}</button>
-      {/if}
-      <ul class="list">
-        {#each details.members as member (member.id)}
-          {@const can = actionsFor(member)}
-          <li>
+    {#if tab}
+      <section class="contents" aria-labelledby="contents-title">
+        <div class="tabs" bind:this={strip} role="tablist" aria-label={t('room.tabs.label')} tabindex="-1" onkeydown={onTabKey}>
+          {#each tabs as value (value)}
             <button
               type="button"
-              class="row"
-              disabled={!(can.write || can.role || can.remove || can.ban)}
-              aria-haspopup="menu"
-              onclick={(event) => openMember(member, event)}
+              role="tab"
+              id="tab-{value}"
+              aria-selected={tab === value}
+              aria-controls="tabpanel"
+              tabindex={tab === value ? 0 : -1}
+              bind:this={tabButtons[value]}
+              onclick={() => (chosen = value)}>{t(tabTitle(value))}</button
             >
-              <span class="avatar"><Avatar name={member.name} seed={member.id} photo={photoOf(member)} mode={preferences.faces} /></span>
-              <span class="what">
-                <span class="name">{member.name}</span>
-                {#if member.ambiguous}<span class="line">{member.id}</span>{/if}
-                {#if member.invited}<span class="line">{t('room.manage.invited')}</span>{/if}
-              </span>
-              {#if roleLabel(member.role)}<span class="role">{roleLabel(member.role)}</span>{/if}
+          {/each}
+        </div>
+        <div id="tabpanel" role="tabpanel" aria-labelledby="tab-{tab}">
+          <h3 id="contents-title">
+            {t(tabTitle(tab))}
+            {#if tab === 'members'}<span class="count">{plural('room.members', details.members.length)}</span>{/if}
+          </h3>
+          {#if tab === 'members'}
+            {#if details.permissions.canInvite}
+              <button type="button" class="link" onclick={() => (inviting = true)}>{t('room.manage.invite')}</button>
+            {/if}
+            <ul class="list">
+              {#each details.members as member (member.id)}
+                {@const can = actionsFor(member)}
+                <li>
+                  <button
+                    type="button"
+                    class="row"
+                    disabled={!(can.write || can.role || can.remove || can.ban)}
+                    aria-haspopup="menu"
+                    onclick={(event) => openMember(member, event)}
+                  >
+                    <span class="avatar"><Avatar name={member.name} seed={member.id} photo={photoOf(member)} mode={preferences.faces} /></span>
+                    <span class="what">
+                      <span class="name">{member.name}</span>
+                      {#if member.ambiguous}<span class="line">{member.id}</span>{/if}
+                      {#if member.invited}<span class="line">{t('room.manage.invited')}</span>{/if}
+                    </span>
+                    {#if roleLabel(member.role)}<span class="role">{roleLabel(member.role)}</span>{/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else if tab === 'media'}
+            <ul class="grid">
+              {#each contents.media as item (item.key)}
+                <li>
+                  <MediaTile kind={item.kind === 'video' ? 'video' : 'image'} attachment={item.attachment} media={session.media} onopen={() => view(contents.media, item.key)} />
+                </li>
+              {/each}
+            </ul>
+          {:else if tab === 'videoNotes'}
+            <ul class="list">
+              {#each contents.videoNotes as item (item.key)}
+                <li class="item">
+                  <span class="note"><MediaTile kind="videoNote" attachment={item.attachment} media={session.media} onopen={() => view(contents.videoNotes, item.key)} /></span>
+                  <span class="what">
+                    <span class="name">{item.senderName}</span>
+                    <span class="line">{item.attachment.duration ? `${duration(item.attachment.duration)} · ` : ''}{when(item.ts)}</span>
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          {:else if tab === 'voice' || tab === 'files'}
+            <ul class="list">
+              {#each contents[tab] as item (item.key)}
+                <li class="file">
+                  <FileCard kind={item.kind === 'file' ? 'file' : item.kind === 'voice' ? 'voice' : 'audio'} attachment={item.attachment} media={session.media} />
+                  <span class="line">{item.senderName} · {when(item.ts)}</span>
+                </li>
+              {/each}
+            </ul>
+          {:else if tab === 'links'}
+            <ul class="list">
+              {#each contents.links as item (item.key)}
+                <li class="file">
+                  <a class="address" href={item.href} target="_blank" rel="noopener noreferrer">{item.text}</a>
+                  <span class="context">{item.context}</span>
+                  <span class="line">{when(item.ts)}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if tab !== 'members' && timeline && !timeline.atStart}
+            <button type="button" class="link earlier" disabled={loadingEarlier} aria-busy={loadingEarlier} onclick={() => void loadEarlier()}>
+              {t('room.galleryLoadEarlier')}
             </button>
-          </li>
-        {/each}
-      </ul>
-    </section>
+          {/if}
+        </div>
+      </section>
+    {/if}
 
     <section>
       <button type="button" class="danger" disabled={details.working} onclick={() => (leaving = true)}>{t('room.manage.leave')}</button>
@@ -225,6 +360,10 @@
       {/if}
     {/if}
   </Menu>
+
+  {#if viewing}
+    <Viewer items={viewing.items} start={viewing.start} media={session.media} onclose={() => (viewing = null)} />
+  {/if}
 
   <RoomEditDialog open={editing} {details} {session} onclose={() => (editing = false)} />
   <InviteDialog open={inviting} {details} onclose={() => (inviting = false)} />
@@ -389,6 +528,84 @@
     flex: none;
     font-size: var(--font-size-caption);
     color: var(--color-text-secondary);
+  }
+  .tabs {
+    position: relative;
+    display: flex;
+    gap: var(--space-tight);
+    padding: var(--space-tight);
+    border-radius: var(--radius-circle);
+    background: var(--color-surface);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs button {
+    flex: 1 0 auto;
+    min-height: var(--tap-target);
+    padding: 0 var(--space-close);
+    border: none;
+    border-radius: var(--radius-circle);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .tabs button[aria-selected='true'] {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  [role='tabpanel'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-close);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--size-gallery-tile), 1fr));
+    gap: var(--space-tight);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-close);
+    padding: var(--space-tight) var(--space-close);
+  }
+  .note {
+    flex: none;
+    width: var(--size-avatar);
+  }
+  .file {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-tight);
+    padding: var(--space-close);
+    min-width: 0;
+  }
+  .file + .file {
+    border-block-start: var(--border-hairline) solid var(--color-separator);
+  }
+  .address {
+    color: var(--accent);
+    overflow-wrap: anywhere;
+  }
+  .context {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    font-size: var(--font-size-caption);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+  .link.earlier {
+    align-self: center;
   }
   .link {
     align-self: flex-start;

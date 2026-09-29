@@ -29,6 +29,7 @@
   import Settings from '../settings/Settings.svelte';
   import RoomPanel from '../room/RoomPanel.svelte';
   import LockedHistoryStrip from '../recovery/LockedHistoryStrip.svelte';
+  import type { TimelineStore } from '../../core/timeline/timelineStore.svelte.ts';
 
   let { session }: { session: UserSession } = $props();
   let confirmingSignOut = $state(false);
@@ -36,6 +37,7 @@
   let helping = $state(false);
   let creating = $state(false);
   let roomView: RoomView | undefined = $state();
+  let roomTimeline: TimelineStore | undefined = $state();
 
   let panelOpen = $state(false);
   const roomId = $derived(router.route.name === 'room' ? router.route.roomId : null);
@@ -164,7 +166,7 @@
         {/snippet}
       </Bar>
       {#key roomId}
-        <RoomView bind:this={roomView} {session} {roomId} />
+        <RoomView bind:this={roomView} bind:store={roomTimeline} {session} {roomId} />
       {/key}
       </div>
     {:else if router.route.name === 'settings'}
@@ -195,6 +197,7 @@
           <RoomPanel
             {session}
             {roomId}
+            timeline={roomTimeline?.roomId === roomId ? roomTimeline : undefined}
             onjump={(eventId) => {
               // На узком экране лист закрывает ленту — к сообщению можно только закрыв его.
               if (viewport.layout !== 'three') panelOpen = false;

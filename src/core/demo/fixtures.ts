@@ -200,6 +200,8 @@ export function buildDemoWorld(now: number): { rooms: DemoRoom[]; invites: DemoI
         sender: boris,
         content: { msgtype: 'm.file', body: 'Что взять.txt', url: `mxc://${DEMO_SERVER}/list`, info: { mimetype: 'text/plain', size: 96 } },
       },
+      // Ссылка простым текстом — для вкладки «Ссылки» в «О чате».
+      text(boris, 'Прогноз на субботу: https://example.org/weather — вроде солнце'),
       text(vera, 'Алиса, ты с нами?', {
         format: 'org.matrix.custom.html',
         formatted_body: `<a href="https://matrix.to/#/${alice}">Алиса</a>, ты с нами?`,
