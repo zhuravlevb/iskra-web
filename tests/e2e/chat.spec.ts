@@ -241,6 +241,9 @@ test('отметки — рядом с пузырём: «глаз» у само�
   await expect(read.getByRole('img', { name: 'Прочитано' })).toBeVisible();
   // Время — не в пузыре.
   await expect(bubble(page, 'Поеду! Во сколько?').locator('time')).toHaveCount(0);
+  // Скринридеру сообщение говорит, чьё оно: в личном чате имени на экране нет.
+  expect(await bubble(page, 'Поеду! Во сколько?').ariaSnapshot()).toContain('Вы:');
+  expect(await bubble(page, 'Возьми плед, там ветрено').ariaSnapshot()).toContain('Аня:');
 
   await page.getByRole('textbox', { name: 'Сообщение' }).fill('Беру термос');
   await page.getByRole('button', { name: 'Отправить' }).click();

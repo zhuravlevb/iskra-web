@@ -159,6 +159,7 @@
   "message.menu.sentAt": "Sent {time}",
   "message.menu.unpin": "Unpin",
   "message.reactions": "Reactions",
+  "message.spoken.you": "You",
   "message.unreadable": "This message was sent before you joined, so it can’t be shown.",
   "message.unsupported": "Iskra can’t show this message yet.",
   "onboarding.appearance.body": "This is the colour of your own messages and of everything you press. Change it whenever you like, under Appearance in the settings.",

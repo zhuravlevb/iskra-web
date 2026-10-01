@@ -91,7 +91,8 @@
     {/if}
     <div class="stack">
       {#if nameHere}
-        <span class="sender">{message.senderName}</span>
+        <!-- Видимое имя — для глаз; скринридеру его говорит само сообщение, у каждого. -->
+        <span class="sender" aria-hidden="true">{message.senderName}</span>
       {/if}
       <div class="bubble-wrap">
       <!-- Пузырь — `article`: запись в `role="log"` ленты. С клавиатуры меню открывает «ещё»
@@ -106,6 +107,9 @@
         {oncontextmenu}
         use:touchGestures={gestures}
       >
+        <!-- Кто говорит — скринридеру, в начале каждого сообщения (`spokenLabel` нативной Искры):
+             в личном чате и у своих имени на экране нет, а в группе оно есть только над серией. -->
+        <span class="visually-hidden">{message.own ? t('message.spoken.you') : message.senderName}: </span>
         {#if message.replyTo}
           <span class="quote">
             {#if message.replyTo.senderName}<strong>{message.replyTo.senderName}</strong>{/if}
