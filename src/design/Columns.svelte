@@ -177,6 +177,27 @@
     background: var(--color-surface);
   }
 
+  /* Строка заголовка окна (titlebar.css): отступ от кнопок окна — только крайним колонкам.
+     Слева — всегда список; справа — панель, если она стоит колонкой, иначе чат. Лист панели
+     лежит поверх правого края, ему — тоже. На стеке колонка одна — ей обе стороны. */
+  .list {
+    --bar-inset-start: var(--titlebar-start);
+  }
+  .main,
+  .panel {
+    --bar-inset-end: var(--titlebar-end);
+  }
+  .columns[data-layout='three'][data-panel-open='true'] .main {
+    --bar-inset-end: 0px;
+  }
+  .columns[data-layout='stack'] .list {
+    --bar-inset-end: var(--titlebar-end);
+  }
+  .columns[data-layout='stack'] .main,
+  .columns[data-layout='stack'] .panel {
+    --bar-inset-start: var(--titlebar-start);
+  }
+
   .resize {
     position: relative;
     z-index: 2;

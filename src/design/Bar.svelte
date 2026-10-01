@@ -12,7 +12,7 @@
   let { leading, title, trailing }: Props = $props();
 </script>
 
-<header class="bar glass">
+<header class="bar glass" data-titlebar>
   <div class="side">{#if leading}{@render leading()}{/if}</div>
   <h1>{title}</h1>
   <div class="side end">{#if trailing}{@render trailing()}{/if}</div>
@@ -31,7 +31,10 @@
     padding: var(--space-tight) var(--space-close);
     /* Вырез и статус-бар телефона: viewport-fit=cover отдаёт нам весь экран. */
     padding-block-start: max(var(--space-tight), env(safe-area-inset-top));
-    padding-inline: max(var(--space-close), env(safe-area-inset-left)) max(var(--space-close), env(safe-area-inset-right));
+    /* Вырез телефона — или кнопки окна, если шапка лежит в строке заголовка (titlebar.css,
+       отступ раздаёт `Columns`). */
+    padding-inline: max(var(--space-close), env(safe-area-inset-left), var(--bar-inset-start, 0px))
+      max(var(--space-close), env(safe-area-inset-right), var(--bar-inset-end, 0px));
     border-block-end: var(--border-hairline) solid var(--color-separator);
   }
   h1 {

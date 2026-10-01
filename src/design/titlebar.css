@@ -1,0 +1,35 @@
+/*
+ * Window Controls Overlay — установленное PWA на десктопе отдаёт приложению строку заголовка
+ * окна (`display_override` в манифесте), и шапки колонок занимают её, как у нативных
+ * приложений, а не лежат под пустой полосой. Кнопки окна остаются поверх — справа на Windows
+ * и Linux, слева на macOS; `env(titlebar-area-*)` говорит, сколько места у них.
+ *
+ * Здесь — сколько отступить крайним шапкам с каждой стороны. Приложение на очень широком окне
+ * стоит по центру (`--column-app-max`), и поля вокруг уже отодвигают его от кнопок: от отступа
+ * отнимается поле. Раздаёт отступы `Columns` — только крайним колонкам, `Bar` их применяет.
+ */
+:root {
+  --titlebar-start: 0px;
+  --titlebar-end: 0px;
+}
+
+@media (display-mode: window-controls-overlay) {
+  :root {
+    --titlebar-gutter: max(0px, (100vw - var(--column-app-max)) / 2);
+    --titlebar-start: max(0px, env(titlebar-area-x, 0px) - var(--titlebar-gutter));
+    --titlebar-end: max(
+      0px,
+      100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) - var(--titlebar-gutter)
+    );
+  }
+
+  /* За шапку окно таскают; всё, что в ней нажимается, — нажимается. */
+  [data-titlebar] {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  [data-titlebar] :is(button, a, input, select, textarea, [role='button'], [tabindex]) {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}
